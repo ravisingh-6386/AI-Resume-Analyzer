@@ -9,7 +9,9 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import {usePuterStore} from "~/lib/puter";
+import {usePuterStore} from "./lib/puter";
+import {initializeAuth} from "./lib/auth";
+import "./lib/testSetup"; // Import test setup utilities
 import {useEffect} from "react";
 
 export const links: Route.LinksFunction = () => [
@@ -26,10 +28,29 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { init } = usePuterStore();
+  const init = usePuterStore((s) => s.init);
 
   useEffect(() => {
-    init()
+    // Initialize auth from localStorage
+    initializeAuth();
+
+    // load the puter script dynamically so we can detect success/failure
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      init();
+    };
+    script.onerror = () => {
+      usePuterStore.setState({ error: "Puter.js failed to load" });
+    };
+
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
   }, [init]);
 
   return (
@@ -39,9 +60,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <style>{`html,body{font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;}`}</style>
       </head>
       <body>
-        <script src="https://js.puter.com/v2/"></script>
         {children}
         <ScrollRestoration />
         <Scripts />

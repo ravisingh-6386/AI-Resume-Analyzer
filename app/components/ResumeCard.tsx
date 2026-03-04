@@ -1,7 +1,7 @@
 import {Link} from "react-router";
-import ScoreCircle from "~/components/ScoreCircle";
+import ScoreCircle from "./ScoreCircle";
 import {useEffect, useState} from "react";
-import {usePuterStore} from "~/lib/puter";
+import {usePuterStore} from "../lib/puter";
 
 const ResumeCard = ({ resume: { id, companyName, jobTitle, feedback, imagePath } }: { resume: Resume }) => {
     const { fs } = usePuterStore();
@@ -27,7 +27,13 @@ const ResumeCard = ({ resume: { id, companyName, jobTitle, feedback, imagePath }
                     {!companyName && !jobTitle && <h2 className="!text-black font-bold">Resume</h2>}
                 </div>
                 <div className="flex-shrink-0">
-                    <ScoreCircle score={feedback.overallScore} />
+                    {feedback && feedback.overallScore !== undefined ? (
+                        <ScoreCircle score={feedback.overallScore} />
+                    ) : (
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                            <span className="text-xs text-gray-500">--</span>
+                        </div>
+                    )}
                 </div>
             </div>
             {resumeUrl && (

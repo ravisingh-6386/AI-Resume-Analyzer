@@ -181,61 +181,42 @@ export const resumes: Resume[] = [
     },
 ];
 
-export const AIResponseFormat = `
-      interface Feedback {
-      overallScore: number; //max 100
-      ATS: {
-        score: number; //rate based on ATS suitability
-        tips: {
-          type: "good" | "improve";
-          tip: string; //give 3-4 tips
-        }[];
-      };
-      toneAndStyle: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      content: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      structure: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-      skills: {
-        score: number; //max 100
-        tips: {
-          type: "good" | "improve";
-          tip: string; //make it a short "title" for the actual explanation
-          explanation: string; //explain in detail here
-        }[]; //give 3-4 tips
-      };
-    }`;
+export const AIResponseFormat = `{
+  overallScore: number,
+  ATS: {score: number(0-100), tips: [{type: "good"|"improve", tip: string}]},
+  toneAndStyle: {score: number(0-100), tips: [{type: "good"|"improve", tip: string, explanation: string}]},
+  content: {score: number(0-100), tips: [{type: "good"|"improve", tip: string, explanation: string}]},
+  structure: {score: number(0-100), tips: [{type: "good"|"improve", tip: string, explanation: string}]},
+  skills: {score: number(0-100), tips: [{type: "good"|"improve", tip: string, explanation: string}]}
+}`;
 
-export const prepareInstructions = ({jobTitle, jobDescription}: { jobTitle: string; jobDescription: string; }) =>
-    `You are an expert in ATS (Applicant Tracking System) and resume analysis.
-      Please analyze and rate this resume and suggest how to improve it.
-      The rating can be low if the resume is bad.
-      Be thorough and detailed. Don't be afraid to point out any mistakes or areas for improvement.
-      If there is a lot to improve, don't hesitate to give low scores. This is to help the user to improve their resume.
-      If available, use the job description for the job user is applying to to give more detailed feedback.
-      If provided, take the job description into consideration.
-      The job title is: ${jobTitle}
-      The job description is: ${jobDescription}
-      Provide the feedback using the following format:
-      ${AIResponseFormat}
-      Return the analysis as an JSON object, without any other text and without the backticks.
-      Do not include any other text or comments.`;
+export const prepareInstructions = ({jobTitle, jobDescription}: { jobTitle: string; jobDescription: string; }) => {
+    // Truncate very long job descriptions to prevent timeouts
+    const maxLength = 2500;
+    const truncatedDesc = jobDescription.length > maxLength 
+        ? jobDescription.substring(0, maxLength) + '...'
+        : jobDescription;
+    
+    return `You are an expert resume reviewer. Analyze this resume for the ${jobTitle} position.
+
+Job Title: ${jobTitle}
+Job Description: ${truncatedDesc}
+
+CRITICAL INSTRUCTIONS:
+1. Return ONLY a valid JSON object
+2. NO markdown formatting (no \`\`\`json tags)
+3. NO explanatory text before or after the JSON
+4. Just the raw JSON object, nothing else
+
+JSON Format Required:
+${AIResponseFormat}
+
+Scoring Guidelines:
+- Use realistic scores between 60-95
+- Provide 2-4 specific, actionable tips per category
+- Include both "good" (strengths) and "improve" (areas to enhance) tips
+- Focus on ATS compatibility and job relevance
+- Keep each tip concise (max 100 characters)
+
+Start your response with { and end with }`;
+};

@@ -1,7 +1,8 @@
 import type { Route } from "./+types/home";
-import Navbar from "~/components/Navbar";
-import ResumeCard from "~/components/ResumeCard";
-import {usePuterStore} from "~/lib/puter";
+import Navbar from "../components/Navbar";
+import ResumeCard from "../components/ResumeCard";
+import {usePuterStore} from "../lib/puter";
+import {useAuthStore} from "../lib/auth";
 import {Link, useNavigate} from "react-router";
 import {useEffect, useState} from "react";
 
@@ -13,14 +14,15 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const { auth, kv } = usePuterStore();
+  const { kv } = usePuterStore();
+  const { isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loadingResumes, setLoadingResumes] = useState(false);
 
   useEffect(() => {
-    if(!auth.isAuthenticated) navigate('/auth?next=/');
-  }, [auth.isAuthenticated])
+    if(!isAuthenticated) navigate('/auth?next=/');
+  }, [isAuthenticated, navigate])
 
   useEffect(() => {
     const loadResumes = async () => {

@@ -246,23 +246,10 @@ export const usePuterStore = create<PuterStore>((set, get) => {
         if (puter) {
             set({ puterReady: true });
             checkAuthStatus();
-            return;
+        } else {
+            // if init is called and puter still missing, it means script failed or hasn't loaded
+            setError("Puter.js not available");
         }
-
-        const interval = setInterval(() => {
-            if (getPuter()) {
-                clearInterval(interval);
-                set({ puterReady: true });
-                checkAuthStatus();
-            }
-        }, 100);
-
-        setTimeout(() => {
-            clearInterval(interval);
-            if (!getPuter()) {
-                setError("Puter.js failed to load within 10 seconds");
-            }
-        }, 10000);
     };
 
     const write = async (path: string, data: string | File | Blob) => {
@@ -412,7 +399,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     };
 
     return {
-        isLoading: true,
+        isLoading: false,
         error: null,
         puterReady: false,
         auth: {

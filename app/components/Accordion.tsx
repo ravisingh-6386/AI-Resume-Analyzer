@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import React, { createContext, useContext, useState } from "react";
-import { cn } from "~/lib/utils";
+import { cn } from "../lib/utils";
 
 interface AccordionContextType {
     activeItems: string[];
