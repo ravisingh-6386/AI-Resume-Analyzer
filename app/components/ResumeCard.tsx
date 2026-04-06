@@ -1,9 +1,9 @@
 import {Link} from "react-router";
 import ScoreCircle from "./ScoreCircle";
-import {useEffect, useState} from "react";
+import {useEffect, useState, memo} from "react";
 import {usePuterStore} from "../lib/puter";
 
-const ResumeCard = ({ resume: { id, companyName, jobTitle, feedback, imagePath } }: { resume: Resume }) => {
+const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imagePath } }: { resume: Resume }) => {
     const { fs } = usePuterStore();
     const [resumeUrl, setResumeUrl] = useState('');
 
@@ -49,5 +49,6 @@ const ResumeCard = ({ resume: { id, companyName, jobTitle, feedback, imagePath }
                 )}
         </Link>
     )
-}
+});
+ResumeCard.displayName = 'ResumeCard';
 export default ResumeCard

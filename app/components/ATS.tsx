@@ -1,5 +1,3 @@
-import React from 'react'
-
 interface Suggestion {
   type: "good" | "improve";
   tip: string;
@@ -10,7 +8,9 @@ interface ATSProps {
   suggestions: Suggestion[];
 }
 
-const ATS: React.FC<ATSProps> = ({ score, suggestions }) => {
+import { memo } from "react";
+
+const ATS = memo(({ score, suggestions }: ATSProps) => {
   // Determine background gradient based on score
   const gradientClass = score > 69
     ? 'from-green-100'
@@ -72,6 +72,7 @@ const ATS: React.FC<ATSProps> = ({ score, suggestions }) => {
       </p>
     </div>
   )
-}
+});
+ATS.displayName = 'ATS';
 
 export default ATS

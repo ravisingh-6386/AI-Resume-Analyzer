@@ -9,10 +9,10 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import {usePuterStore} from "./lib/puter";
-import {initializeAuth} from "./lib/auth";
-import "./lib/testSetup"; // Import test setup utilities
-import {useEffect} from "react";
+import { usePuterStore } from "./lib/puter";
+import { initializeAuth } from "./lib/auth";
+import "./lib/testSetup";
+import { type ReactNode, useEffect, useState } from "react";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -27,14 +27,14 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children }: { children: ReactNode }) {
   const init = usePuterStore((s) => s.init);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
-    // Initialize auth from localStorage
     initializeAuth();
 
-    // load the puter script dynamically so we can detect success/failure
     const script = document.createElement("script");
     script.src = "https://js.puter.com/v2/";
     script.async = true;
@@ -53,6 +53,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [init]);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initialTheme =
+      savedTheme === "dark" || savedTheme === "light"
+        ? savedTheme
+        : prefersDark
+          ? "dark"
+          : "light";
+
+    document.documentElement.classList.toggle("dark", initialTheme === "dark");
+    setTheme(initialTheme);
+    setThemeReady(true);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    localStorage.setItem("theme", nextTheme);
+    setTheme(nextTheme);
+  };
+
   return (
     <html lang="en">
       <head>
@@ -63,6 +85,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <style>{`html,body{font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;}`}</style>
       </head>
       <body>
+        {themeReady && (
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="theme-toggle"
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            <span className="text-lg" aria-hidden="true">
+              {theme === "dark" ? "Sun" : "Moon"}
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-wide">
+              {theme === "dark" ? "Light" : "Dark"}
+            </span>
+          </button>
+        )}
         {children}
         <ScrollRestoration />
         <Scripts />

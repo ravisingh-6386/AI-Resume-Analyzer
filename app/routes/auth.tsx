@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAuthStore, initializeAuth } from "../lib/auth";
 import LoginForm from "../components/LoginForm";
 import SignupForm from "../components/SignupForm";
+import ForgotPasswordForm from "../components/ForgotPasswordForm";
 
 export const meta = () => ([
   { title: "Resumind | Auth" },
@@ -29,27 +30,35 @@ const Auth = () => {
   }, [isAuthenticated, navigate, next]);
 
   return (
-    <main className="bg-gradient-to-br from-rose-50 via-white to-pink-100 min-h-screen flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md">
+    <main className="auth-shell min-h-screen flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-2xl">
         {/* Gradient Border Card */}
         <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 rounded-3xl opacity-20 blur-xl" />
+          <div className="auth-glow absolute inset-0 rounded-3xl opacity-20 blur-xl" />
           
-          <section className="relative bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl">
+          <section className="auth-card relative rounded-3xl p-8 shadow-2xl">
             {/* Header */}
             <div className="flex flex-col items-center gap-3 mb-8 text-center">
               <h1 className="text-3xl font-bold">
                 Welcome <span className="text-indigo-600">Back</span>
               </h1>
-              <h2 className="text-gray-600 text-sm">
+              <h2 className="auth-subtitle text-sm">
                 {mode === "signup"
                   ? "Create Your Account"
+                  : mode === "forgot-password"
+                  ? "Reset Your Password"
                   : "Log In to Continue Your Job Journey"}
               </h2>
             </div>
 
             {/* Forms */}
-            {mode === "signup" ? <SignupForm /> : <LoginForm />}
+            {mode === "signup" ? (
+              <SignupForm />
+            ) : mode === "forgot-password" ? (
+              <ForgotPasswordForm />
+            ) : (
+              <LoginForm />
+            )}
           </section>
         </div>
       </div>

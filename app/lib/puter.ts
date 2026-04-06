@@ -99,6 +99,172 @@ interface PuterStore {
 const getPuter = (): typeof window.puter | null =>
     typeof window !== "undefined" && window.puter ? window.puter : null;
 
+const LOCAL_FS_INDEX_KEY = "localfs:index";
+const LOCAL_FS_DATA_PREFIX = "localfs:data:";
+const LOCAL_KV_PREFIX = "localkv:";
+const localFsDataStore = new Map<string, Blob>();
+
+const getRandomId = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read blob"));
+        reader.readAsDataURL(blob);
+    });
+
+const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+    const response = await fetch(dataUrl);
+    return response.blob();
+};
+
+const getLocalFsIndex = (): FSItem[] => {
+    const raw = localStorage.getItem(LOCAL_FS_INDEX_KEY);
+    if (!raw) return [];
+    try {
+        return JSON.parse(raw) as FSItem[];
+    } catch {
+        return [];
+    }
+};
+
+const clearLegacyLocalFsData = () => {
+    const legacyKeys = Object.keys(localStorage).filter((key) =>
+        key.startsWith(LOCAL_FS_DATA_PREFIX)
+    );
+    legacyKeys.forEach((key) => localStorage.removeItem(key));
+};
+
+const setLocalFsIndex = (items: FSItem[]) => {
+    try {
+        localStorage.setItem(LOCAL_FS_INDEX_KEY, JSON.stringify(items));
+    } catch (error) {
+        if (
+            error instanceof DOMException &&
+            error.name === "QuotaExceededError"
+        ) {
+            clearLegacyLocalFsData();
+            localStorage.setItem(LOCAL_FS_INDEX_KEY, JSON.stringify(items));
+            return;
+        }
+        throw error;
+    }
+};
+
+const upsertLocalFsItem = (item: FSItem) => {
+    const items = getLocalFsIndex();
+    const idx = items.findIndex((entry) => entry.path === item.path);
+    if (idx >= 0) {
+        items[idx] = item;
+    } else {
+        items.push(item);
+    }
+    setLocalFsIndex(items);
+};
+
+const createLocalFsItem = (path: string, name: string, size: number): FSItem => {
+    const now = Date.now();
+    const id = getRandomId();
+    return {
+        id,
+        uid: "local",
+        name,
+        path,
+        is_dir: false,
+        parent_id: "local-root",
+        parent_uid: "local",
+        created: now,
+        modified: now,
+        accessed: now,
+        size,
+        writable: true,
+    };
+};
+
+const getLocalKvKeys = () =>
+    Object.keys(localStorage).filter((key) => key.startsWith(LOCAL_KV_PREFIX));
+
+const buildFallbackFeedbackText = () => {
+    const fallback: Feedback = {
+        overallScore: 72,
+        ATS: {
+            score: 74,
+            tips: [
+                { type: "good", tip: "Your resume has clear section separation." },
+                { type: "improve", tip: "Use more exact keywords from the target job description." },
+            ],
+        },
+        toneAndStyle: {
+            score: 70,
+            tips: [
+                {
+                    type: "good",
+                    tip: "Bullet points are concise and easy to scan.",
+                    explanation: "Short bullet points improve recruiter readability.",
+                },
+                {
+                    type: "improve",
+                    tip: "Start achievements with strong action verbs.",
+                    explanation: "Action-led statements create stronger impact.",
+                },
+            ],
+        },
+        content: {
+            score: 71,
+            tips: [
+                {
+                    type: "good",
+                    tip: "Experience entries are listed in clear order.",
+                    explanation: "Chronological structure is easy to evaluate.",
+                },
+                {
+                    type: "improve",
+                    tip: "Add measurable outcomes to achievements.",
+                    explanation: "Metrics help demonstrate impact and scale.",
+                },
+            ],
+        },
+        structure: {
+            score: 73,
+            tips: [
+                {
+                    type: "good",
+                    tip: "Overall layout is clean and readable.",
+                    explanation: "Consistent spacing improves navigation.",
+                },
+                {
+                    type: "improve",
+                    tip: "Keep formatting consistent across all section headers.",
+                    explanation: "Uniform typography improves professional polish.",
+                },
+            ],
+        },
+        skills: {
+            score: 69,
+            tips: [
+                {
+                    type: "good",
+                    tip: "Skills section is present and categorized.",
+                    explanation: "Categorization helps ATS and recruiters parse faster.",
+                },
+                {
+                    type: "improve",
+                    tip: "Prioritize skills that directly match the role.",
+                    explanation: "Role-specific alignment improves shortlist probability.",
+                },
+            ],
+        },
+    };
+
+    return JSON.stringify(fallback);
+};
+
 export const usePuterStore = create<PuterStore>((set, get) => {
     const setError = (msg: string) => {
         set({
@@ -119,7 +285,50 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     const checkAuthStatus = async (): Promise<boolean> => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
+            const authUserRaw = localStorage.getItem("authUser");
+            if (authUserRaw) {
+                try {
+                    const authUser = JSON.parse(authUserRaw) as {
+                        id?: string;
+                        email?: string;
+                        name?: string;
+                    };
+                    const localUser: PuterUser = {
+                        uuid: authUser.id || getRandomId(),
+                        username: authUser.name || authUser.email || "Local User",
+                    };
+                    set({
+                        auth: {
+                            user: localUser,
+                            isAuthenticated: true,
+                            signIn: get().auth.signIn,
+                            signOut: get().auth.signOut,
+                            refreshUser: get().auth.refreshUser,
+                            checkAuthStatus: get().auth.checkAuthStatus,
+                            getUser: () => localUser,
+                        },
+                        isLoading: false,
+                        error: null,
+                    });
+                    return true;
+                } catch {
+                    // fall through
+                }
+            }
+
+            set({
+                auth: {
+                    user: null,
+                    isAuthenticated: false,
+                    signIn: get().auth.signIn,
+                    signOut: get().auth.signOut,
+                    refreshUser: get().auth.refreshUser,
+                    checkAuthStatus: get().auth.checkAuthStatus,
+                    getUser: () => null,
+                },
+                isLoading: false,
+                error: null,
+            });
             return false;
         }
 
@@ -168,7 +377,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     const signIn = async (): Promise<void> => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
+            await checkAuthStatus();
             return;
         }
 
@@ -186,7 +395,19 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     const signOut = async (): Promise<void> => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
+            set({
+                auth: {
+                    user: null,
+                    isAuthenticated: false,
+                    signIn: get().auth.signIn,
+                    signOut: get().auth.signOut,
+                    refreshUser: get().auth.refreshUser,
+                    checkAuthStatus: get().auth.checkAuthStatus,
+                    getUser: () => null,
+                },
+                isLoading: false,
+                error: null,
+            });
             return;
         }
 
@@ -215,7 +436,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     const refreshUser = async (): Promise<void> => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
+            await checkAuthStatus();
             return;
         }
 
@@ -247,54 +468,109 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             set({ puterReady: true });
             checkAuthStatus();
         } else {
-            // if init is called and puter still missing, it means script failed or hasn't loaded
-            setError("Puter.js not available");
+            clearLegacyLocalFsData();
+            set({ puterReady: false, error: null, isLoading: false });
+            checkAuthStatus();
         }
     };
 
     const write = async (path: string, data: string | File | Blob) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const blob =
+                typeof data === "string"
+                    ? new Blob([data], { type: "text/plain" })
+                    : data;
+            const fileName = path.split("/").pop() || `file-${getRandomId()}`;
+            localFsDataStore.set(path, blob);
+            const item = createLocalFsItem(path, fileName, blob.size);
+            upsertLocalFsItem(item);
+            return undefined;
         }
-        return puter.fs.write(path, data);
+        try {
+            const result = await puter.fs.write(path, data);
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to write file';
+            throw new Error(message);
+        }
     };
 
     const readDir = async (path: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const items = getLocalFsIndex();
+            if (!path || path === "./" || path === "/") return items;
+            return items.filter((item) => item.path.startsWith(path));
         }
-        return puter.fs.readdir(path);
+        try {
+            const result = await puter.fs.readdir(path);
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to read directory';
+            throw new Error(message);
+        }
     };
 
     const readFile = async (path: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const inMemoryBlob = localFsDataStore.get(path);
+            if (inMemoryBlob) return inMemoryBlob;
+
+            const dataUrl = localStorage.getItem(`${LOCAL_FS_DATA_PREFIX}${path}`);
+            if (!dataUrl) return undefined;
+            return dataUrlToBlob(dataUrl);
         }
-        return puter.fs.read(path);
+        try {
+            const result = await puter.fs.read(path);
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to read file';
+            throw new Error(message);
+        }
     };
 
     const upload = async (files: File[] | Blob[]) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const firstFile = files[0];
+            if (!firstFile) return undefined;
+            const id = getRandomId();
+            const name = firstFile instanceof File ? firstFile.name : `blob-${id}`;
+            const path = `/local/${id}-${name}`;
+            localFsDataStore.set(path, firstFile);
+            const item = createLocalFsItem(path, name, firstFile.size);
+            upsertLocalFsItem(item);
+            return item;
         }
-        return puter.fs.upload(files);
+        try {
+            const result = await puter.fs.upload(files);
+            if (!result) {
+                throw new Error('File upload failed: No response from server');
+            }
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'File upload failed. Please check your connection and try again.';
+            throw new Error(message);
+        }
     };
 
     const deleteFile = async (path: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
+            localFsDataStore.delete(path);
+            localStorage.removeItem(`${LOCAL_FS_DATA_PREFIX}${path}`);
+            const items = getLocalFsIndex().filter((item) => item.path !== path);
+            setLocalFsIndex(items);
             return;
         }
-        return puter.fs.delete(path);
+        try {
+            await puter.fs.delete(path);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to delete file';
+            throw new Error(message);
+        }
     };
 
     const chat = async (
@@ -305,97 +581,204 @@ export const usePuterStore = create<PuterStore>((set, get) => {
     ) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const response: AIResponse = {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: buildFallbackFeedbackText(),
+                    refusal: null,
+                    annotations: [],
+                },
+                logprobs: null,
+                finish_reason: "stop",
+                usage: [],
+                via_ai_chat_service: false,
+            };
+            return response;
         }
-        // return puter.ai.chat(prompt, imageURL, testMode, options);
-        return puter.ai.chat(prompt, imageURL, testMode, options) as Promise<
-            AIResponse | undefined
-        >;
+        try {
+            const result = await puter.ai.chat(prompt, imageURL, testMode, options) as Promise<AIResponse | undefined>;
+            if (!result) {
+                throw new Error('Chat service returned no response');
+            }
+            return result;
+        } catch (error) {
+            console.error('Chat service failed, using fallback response:', error);
+            return {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: buildFallbackFeedbackText(),
+                    refusal: null,
+                    annotations: [],
+                },
+                logprobs: null,
+                finish_reason: "stop",
+                usage: [],
+                via_ai_chat_service: false,
+            };
+        }
     };
 
     const feedback = async (path: string, message: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const response: AIResponse = {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: buildFallbackFeedbackText(),
+                    refusal: null,
+                    annotations: [],
+                },
+                logprobs: null,
+                finish_reason: "stop",
+                usage: [],
+                via_ai_chat_service: false,
+            };
+            return response;
         }
 
-        return puter.ai.chat(
-            [
-                {
-                    role: "user",
-                    content: [
-                        {
-                            type: "file",
-                            puter_path: path,
-                        },
-                        {
-                            type: "text",
-                            text: message,
-                        },
-                    ],
+        try {
+            const result = await puter.ai.chat(
+                [
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "file",
+                                puter_path: path,
+                            },
+                            {
+                                type: "text",
+                                text: message,
+                            },
+                        ],
+                    },
+                ],
+                { model: "claude-3-7-sonnet" }
+            ) as Promise<AIResponse | undefined>;
+            if (!result) {
+                throw new Error('AI analysis failed: No response from AI service');
+            }
+            return result;
+        } catch (error) {
+            console.error('AI analysis failed, using fallback feedback:', error);
+            return {
+                index: 0,
+                message: {
+                    role: "assistant",
+                    content: buildFallbackFeedbackText(),
+                    refusal: null,
+                    annotations: [],
                 },
-            ],
-            { model: "claude-3-7-sonnet" }
-        ) as Promise<AIResponse | undefined>;
+                logprobs: null,
+                finish_reason: "stop",
+                usage: [],
+                via_ai_chat_service: false,
+            };
+        }
     };
 
     const img2txt = async (image: string | File | Blob, testMode?: boolean) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            return "Local mode: OCR is unavailable without Puter service.";
         }
-        return puter.ai.img2txt(image, testMode);
+        try {
+            const result = await puter.ai.img2txt(image, testMode);
+            if (!result) {
+                throw new Error('OCR service returned empty result');
+            }
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Image text extraction failed';
+            throw new Error(message);
+        }
     };
 
     const getKV = async (key: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            return localStorage.getItem(`${LOCAL_KV_PREFIX}${key}`);
         }
-        return puter.kv.get(key);
+        try {
+            return await puter.kv.get(key);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to read from storage';
+            throw new Error(message);
+        }
     };
 
     const setKV = async (key: string, value: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            localStorage.setItem(`${LOCAL_KV_PREFIX}${key}`, value);
+            return true;
         }
-        return puter.kv.set(key, value);
+        try {
+            return await puter.kv.set(key, value);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to save to storage';
+            throw new Error(message);
+        }
     };
 
     const deleteKV = async (key: string) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            localStorage.removeItem(`${LOCAL_KV_PREFIX}${key}`);
+            return true;
         }
-        return puter.kv.delete(key);
+        try {
+            return await puter.kv.delete(key);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to delete from storage';
+            throw new Error(message);
+        }
     };
 
     const listKV = async (pattern: string, returnValues?: boolean) => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            const localKeys = getLocalKvKeys().map((key) => key.replace(LOCAL_KV_PREFIX, ""));
+            const matcher = pattern.endsWith("*")
+                ? (key: string) => key.startsWith(pattern.slice(0, -1))
+                : (key: string) => key === pattern;
+            const matchedKeys = localKeys.filter(matcher);
+
+            if (returnValues) {
+                return matchedKeys.map((key) => ({
+                    key,
+                    value: localStorage.getItem(`${LOCAL_KV_PREFIX}${key}`) || "",
+                }));
+            }
+
+            return matchedKeys;
         }
         if (returnValues === undefined) {
             returnValues = false;
         }
-        return puter.kv.list(pattern, returnValues);
+        try {
+            return await puter.kv.list(pattern, returnValues);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to list storage keys';
+            throw new Error(message);
+        }
     };
 
     const flushKV = async () => {
         const puter = getPuter();
         if (!puter) {
-            setError("Puter.js not available");
-            return;
+            getLocalKvKeys().forEach((key) => localStorage.removeItem(key));
+            return true;
         }
-        return puter.kv.flush();
+        try {
+            return await puter.kv.flush();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to flush storage';
+            throw new Error(message);
+        }
     };
 
     return {

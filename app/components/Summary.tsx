@@ -1,7 +1,8 @@
 import ScoreGauge from "./ScoreGauge";
 import ScoreBadge from "./ScoreBadge";
+import { memo } from "react";
 
-const Category = ({ title, score }: { title: string, score: number }) => {
+const Category = memo(({ title, score }: { title: string, score: number }) => {
     const textColor = score > 70 ? 'text-green-600'
             : score > 49
         ? 'text-yellow-600' : 'text-red-600';
@@ -19,9 +20,10 @@ const Category = ({ title, score }: { title: string, score: number }) => {
             </div>
         </div>
     )
-}
+});
+Category.displayName = 'Category';
 
-const Summary = ({ feedback }: { feedback: Feedback }) => {
+const Summary = memo(({ feedback }: { feedback: Feedback }) => {
     return (
         <div className="bg-white rounded-2xl shadow-md w-full">
             <div className="flex flex-row items-center p-4 gap-8">
@@ -41,5 +43,6 @@ const Summary = ({ feedback }: { feedback: Feedback }) => {
             <Category title="Skills" score={feedback.skills.score} />
         </div>
     )
-}
+});
+Summary.displayName = 'Summary';
 export default Summary

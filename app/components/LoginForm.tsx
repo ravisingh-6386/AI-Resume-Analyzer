@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useAuthStore } from "../lib/auth";
 
@@ -9,7 +9,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [validationError, setValidationError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidationError("");
     clearError();
@@ -40,9 +40,9 @@ export default function LoginForm() {
               setValidationError("");
             }}
             disabled={isLoading}
-            className="w-full pl-24 pr-16 py-6 text-lg rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+            className="w-full pl-4 pr-20 py-8 text-lg rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-base">
             R
           </div>
         </div>
@@ -50,9 +50,17 @@ export default function LoginForm() {
 
       {/* Password Field */}
       <div className="flex flex-col gap-2">
-        <label htmlFor="password" className="text-sm font-medium text-gray-700">
-          Password
-        </label>
+        <div className="flex items-center justify-between">
+          <label htmlFor="password" className="text-sm font-medium text-gray-700">
+            Password
+          </label>
+          <Link
+            to="/auth?mode=forgot-password"
+            className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
+          >
+            Forgot?
+          </Link>
+        </div>
         <input
           id="password"
           type="password"

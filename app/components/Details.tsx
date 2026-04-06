@@ -1,4 +1,5 @@
 import { cn } from "../lib/utils";
+import { memo } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -6,7 +7,7 @@ import {
   AccordionItem,
 } from "./Accordion";
 
-const ScoreBadge = ({ score }: { score: number }) => {
+const ScoreBadge = memo(({ score }: { score: number }) => {
   return (
       <div
           className={cn(
@@ -37,9 +38,10 @@ const ScoreBadge = ({ score }: { score: number }) => {
         </p>
       </div>
   );
-};
+});
+ScoreBadge.displayName = 'ScoreBadge';
 
-const CategoryHeader = ({
+const CategoryHeader = memo(({
                           title,
                           categoryScore,
                         }: {
@@ -52,9 +54,10 @@ const CategoryHeader = ({
         <ScoreBadge score={categoryScore} />
       </div>
   );
-};
+});
+CategoryHeader.displayName = 'CategoryHeader';
 
-const CategoryContent = ({
+const CategoryContent = memo(({
                            tips,
                          }: {
   tips: { type: "good" | "improve"; tip: string; explanation: string }[];
@@ -104,9 +107,10 @@ const CategoryContent = ({
         </div>
       </div>
   );
-};
+});
+CategoryContent.displayName = 'CategoryContent';
 
-const Details = ({ feedback }: { feedback: Feedback }) => {
+const Details = memo(({ feedback }: { feedback: Feedback }) => {
   return (
       <div className="flex flex-col gap-4 w-full">
         <Accordion>
@@ -157,6 +161,7 @@ const Details = ({ feedback }: { feedback: Feedback }) => {
         </Accordion>
       </div>
   );
-};
+});
+Details.displayName = 'Details';
 
 export default Details;

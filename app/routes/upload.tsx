@@ -2,15 +2,20 @@ import {type FormEvent, useState} from 'react'
 import Navbar from "../components/Navbar";
 import FileUploader from "../components/FileUploader";
 import {usePuterStore} from "../lib/puter";
-import {useAuthStore} from "../lib/auth";
 import {useNavigate} from "react-router";
 import {convertPdfToImage} from "../lib/pdf2img";
-import {generateUUID, parseFeedback} from "../lib/utils";
+import {
+    generateActionableRewrites,
+    generateProjectBullets,
+    generateUUID,
+    getRoleKeywordAnalysis,
+    parseFeedback,
+    rewriteFeedbackForStudents,
+} from "../lib/utils";
 import {prepareInstructions} from "../../constants";
 
 const Upload = () => {
-    const { isLoading, fs, ai, kv } = usePuterStore();
-    const { isAuthenticated } = useAuthStore();
+    const { fs, ai, kv } = usePuterStore();
     const navigate = useNavigate();
     const [isProcessing, setIsProcessing] = useState(false);
     const [statusText, setStatusText] = useState('');
@@ -25,11 +30,6 @@ const Upload = () => {
 
         try {
             console.log('Starting analysis. file:', file, 'fs object:', fs, 'puter:', (window as any).puter);
-            
-            // Check if puter is available
-            if (!(window as any).puter) {
-                throw new Error('Puter service is not available. Please ensure you are logged in.');
-            }
 
             setStatusText('Uploading the file...');
             const uploadedFile = await Promise.race([
@@ -46,7 +46,7 @@ const Upload = () => {
 
             setStatusText('Converting to image...');
             const imageFile = await convertPdfToImage(file);
-            if(!imageFile.file) throw new Error('Failed to convert PDF to image');
+            if(!imageFile.file) throw new Error(imageFile.error || 'Failed to convert PDF to image');
 
             setStatusText('Uploading the image...');
             const uploadedImage = await Promise.race([
@@ -60,16 +60,40 @@ const Upload = () => {
 
             setStatusText('Preparing data...');
             const uuid = generateUUID();
-            const data = {
+            const createdAt = Date.now();
+            const data: {
+                id: string;
+                resumePath: string;
+                imagePath: string;
+                companyName: string;
+                jobTitle: string;
+                jobDescription: string;
+                feedback: Feedback | null;
+                studentFeedback?: StudentFeedback;
+                roleKeywordAnalysis?: RoleKeywordAnalysis;
+                generatedProjectBullets?: string[];
+                actionableRewrites?: ActionableRewrite[];
+                usedFallbackAnalysis?: boolean;
+                jobState: string;
+                retryCount: number;
+                createdAt: number;
+                completedAt?: number;
+            } = {
                 id: uuid,
                 resumePath: uploadedFile.path,
                 imagePath: uploadedImage.path,
                 companyName, jobTitle, jobDescription,
                 feedback: null,
+                jobState: 'queued',
+                retryCount: 0,
+                createdAt,
             }
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
 
             setStatusText('Analyzing resume with AI (this may take 2-3 minutes)...');
+            data.jobState = 'processing';
+            await kv.set(`resume:${uuid}`, JSON.stringify(data));
+
             console.log('Starting AI feedback analysis...');
             console.log('Job Title:', jobTitle);
             console.log('Job Description length:', jobDescription.length);
@@ -114,6 +138,8 @@ const Upload = () => {
             console.log('Parsing feedback text...');
             const parsedFeedback = parseFeedback(feedbackText);
             console.log('Parsed feedback:', parsedFeedback);
+
+            const usedFallbackAnalysis = feedback?.via_ai_chat_service === false;
             
             // Validate the parsed feedback has meaningful data
             if (!parsedFeedback || parsedFeedback.overallScore === 0) {
@@ -132,6 +158,18 @@ const Upload = () => {
             }
             
             data.feedback = parsedFeedback;
+            const roleKeywordAnalysis = getRoleKeywordAnalysis(jobTitle, jobDescription, parsedFeedback);
+            const studentFeedback = rewriteFeedbackForStudents(parsedFeedback);
+            const generatedProjectBullets = generateProjectBullets(jobTitle, roleKeywordAnalysis);
+            const actionableRewrites = generateActionableRewrites(parsedFeedback);
+
+            data.roleKeywordAnalysis = roleKeywordAnalysis;
+            data.studentFeedback = studentFeedback;
+            data.generatedProjectBullets = generatedProjectBullets;
+            data.actionableRewrites = actionableRewrites;
+            data.usedFallbackAnalysis = usedFallbackAnalysis;
+            data.jobState = 'done';
+            data.completedAt = Date.now();
             console.log('Saving data to KV store:', data);
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
             
@@ -152,9 +190,26 @@ const Upload = () => {
             console.error('Analysis error details:', {
                 error,
                 message: error instanceof Error ? error.message : 'Unknown error',
-                stack: error instanceof Error ? error.stack : undefined
+                stack: error instanceof Error ? error.stack : undefined,
+                errorType: error ? typeof error : 'undefined'
             });
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+            const errorMsg = error instanceof Error ? error.message : (typeof error === 'string' ? error : 'An unexpected error occurred. Please try again.');
+            
+            // Try to update job state in KV - use the uuid we created earlier
+            try {
+              const existingData = await kv.get(`resume:${uuid}`);
+              if (existingData) {
+                const parsed = JSON.parse(existingData);
+                parsed.jobState = 'failed';
+                parsed.lastError = errorMsg;
+                parsed.retryCount = (parsed.retryCount || 0) + 1;
+                await kv.set(`resume:${uuid}`, JSON.stringify(parsed));
+                console.log('Updated KV with failed state for UUID:', uuid);
+              }
+            } catch (kvError) {
+              console.error('Failed to update KV with error state:', kvError);
+            }
+            
             setStatusText(`Error: ${errorMsg}`);
             setIsProcessing(false);
             
@@ -206,7 +261,7 @@ const Upload = () => {
     }
 
     return (
-        <main className="bg-[url('/images/bg-main.svg')] bg-cover">
+        <main className="app-shell bg-cover">
             <Navbar />
 
             <section className="main-section">

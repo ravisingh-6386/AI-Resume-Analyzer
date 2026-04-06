@@ -18,6 +18,30 @@
   --color-badge-yellow-text: #73321b;
 }
 
+:root {
+  color-scheme: light;
+  --app-bg: #f6f8ff;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f8fafc;
+  --app-text: #101828;
+  --app-text-muted: #475467;
+  --app-border: #e4e7ec;
+  --app-input-bg: #ffffff;
+  --app-overlay: rgba(255, 255, 255, 0.95);
+}
+
+html.dark {
+  color-scheme: dark;
+  --app-bg: #0b1220;
+  --app-surface: #111827;
+  --app-surface-muted: #1f2937;
+  --app-text: #e5e7eb;
+  --app-text-muted: #c7d2fe;
+  --app-border: #334155;
+  --app-input-bg: #0f172a;
+  --app-overlay: rgba(17, 24, 39, 0.92);
+}
+
 /* Define custom utilities first */
 .text-gradient {
   @apply bg-clip-text text-transparent bg-gradient-to-r from-[#AB8C95] via-[#000000] to-[#8E97C5];
@@ -48,7 +72,9 @@
 /* Base element styles */
 html,
 body {
-  @apply bg-white;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 main {
@@ -61,21 +87,28 @@ h1 {
 }
 
 h2 {
-  @apply text-3xl text-dark-200;
+  @apply text-3xl;
+  color: var(--app-text-muted);
 }
 
 label {
-  @apply text-dark-200;
+  color: var(--app-text-muted);
 }
 
 input {
-  @apply w-full p-4 rounded-2xl focus:outline-none bg-white;
+  @apply w-full p-4 rounded-2xl focus:outline-none;
+  background-color: var(--app-input-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
   box-shadow: inset 0 0 12px 0 rgba(36, 99, 235, 0.2);
   backdrop-filter: blur(10px);
 }
 
 textarea {
-  @apply w-full p-4 rounded-2xl focus:outline-none bg-white;
+  @apply w-full p-4 rounded-2xl focus:outline-none;
+  background-color: var(--app-input-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
   box-shadow: inset 0 0 12px 0 rgba(36, 99, 235, 0.2);
   backdrop-filter: blur(10px);
 }
@@ -94,7 +127,9 @@ form {
     box-shadow: 0px 74px 21px 0px #6678ef00;
   }
   .resume-nav {
-    @apply flex flex-row justify-between items-center p-4 border-b border-gray-200;
+    @apply flex flex-row justify-between items-center p-4 border-b;
+    border-color: var(--app-border);
+    background-color: var(--app-surface);
   }
   .resume-summary {
     @apply flex flex-row items-center justify-center p-4 gap-4;
@@ -103,7 +138,10 @@ form {
     @apply flex flex-row gap-2 items-center bg-gray-50 rounded-2xl p-4 w-full justify-between;
   }
   .back-button {
-    @apply flex flex-row items-center gap-2 border border-gray-200 rounded-lg p-2 shadow-sm;
+    @apply flex flex-row items-center gap-2 border rounded-lg p-2 shadow-sm;
+    border-color: var(--app-border);
+    background-color: var(--app-surface);
+    color: var(--app-text);
   }
   .auth-button {
     @apply rounded-full py-4 px-8 cursor-pointer w-[600px] max-md:w-full text-3xl font-semibold text-white;
@@ -120,16 +158,20 @@ form {
     @apply flex flex-wrap max-lg:flex-col gap-6 items-start  w-full max-w-[1850px] justify-evenly;
   }
   .resume-card {
-    @apply flex flex-col gap-8 h-[560px] w-full lg:w-[450px] xl:w-[490px] bg-white rounded-2xl p-4;
+    @apply flex flex-col gap-8 h-[560px] w-full lg:w-[450px] xl:w-[490px] rounded-2xl p-4;
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
   }
   .resume-card-header {
     @apply flex flex-row gap-2 justify-between min-h-[110px] max-sm:flex-col items-center max-md:justify-center max-md:items-center;
   }
   .feedback-section {
-    @apply flex flex-col gap-8 w-1/2 px-8 max-lg:w-full py-6;
+    @apply flex flex-col gap-6 md:gap-8 w-full lg:w-1/2 px-4 md:px-8 py-6 max-h-fit lg:overflow-y-auto;
   }
   .navbar {
-    @apply flex flex-row justify-between items-center bg-white rounded-full p-4 w-full px-10 max-w-[1200px] mx-auto;
+    @apply flex flex-row justify-between items-center rounded-full p-4 w-full px-10 max-w-[1200px] mx-auto;
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
   }
   .score-badge {
     @apply flex flex-row items-center justify-center py-1 px-2 gap-4 rounded-[96px];
@@ -138,10 +180,22 @@ form {
     @apply flex flex-col gap-2 w-full items-start;
   }
   .uplader-drag-area {
-    @apply relative p-8 text-center transition-all duration-700 cursor-pointer bg-white rounded-2xl min-h-[208px];
+    @apply relative p-8 text-center transition-all duration-700 cursor-pointer rounded-2xl min-h-[208px];
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
   }
   .uploader-selected-file {
-    @apply flex items-center justify-between p-3 bg-gray-50 rounded-2xl;
+    @apply flex items-center justify-between p-3 rounded-2xl;
+    background-color: var(--app-surface-muted);
+  }
+  .resume-preview {
+    @apply h-[50vh] md:h-[80vh] lg:h-[100vh] sticky top-0 flex items-center justify-center;
+  }
+  .resume-content {
+    @apply flex flex-col gap-4 md:gap-6 lg:gap-8;
+  }
+  .card-responsive {
+    @apply p-4 md:p-5 lg:p-6 rounded-xl md:rounded-2xl;
   }
 }
 
@@ -159,4 +213,81 @@ form {
 
 .animation-delay-400 {
   animation-delay: 0.4s;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.18);
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.25s ease;
+}
+
+.theme-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.auth-shell {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 45%, #ffe4e6 100%);
+}
+
+.app-shell {
+  background-image: url('/images/bg-main.svg');
+}
+
+.auth-glow {
+  background: linear-gradient(to right, #818cf8, #c084fc, #f472b6);
+}
+
+.auth-card {
+  background-color: var(--app-overlay);
+  border: 1px solid var(--app-border);
+  backdrop-filter: blur(6px);
+}
+
+.auth-subtitle {
+  color: var(--app-text-muted);
+}
+
+html.dark .auth-shell {
+  background: radial-gradient(circle at 15% 20%, #1f2937 0%, #0b1220 60%, #050913 100%);
+}
+
+html.dark .app-shell {
+  background-image: radial-gradient(circle at 15% 20%, #1f2937 0%, #0b1220 60%, #050913 100%);
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/95,
+html.dark .bg-gray-50 {
+  background-color: var(--app-surface) !important;
+}
+
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-gray-700,
+html.dark .text-gray-600,
+html.dark .text-gray-500 {
+  color: var(--app-text) !important;
+}
+
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: var(--app-border) !important;
+}
+
+html.dark .shadow-xl,
+html.dark .shadow-2xl,
+html.dark .shadow-sm {
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.45) !important;
 }
