@@ -27,6 +27,7 @@ const Upload = () => {
 
     const handleAnalyze = async ({ companyName, jobTitle, jobDescription, file }: { companyName: string, jobTitle: string, jobDescription: string, file: File  }) => {
         setIsProcessing(true);
+        let analysisId = '';
 
         try {
             console.log('Starting analysis. file:', file, 'fs object:', fs, 'puter:', (window as any).puter);
@@ -60,6 +61,7 @@ const Upload = () => {
 
             setStatusText('Preparing data...');
             const uuid = generateUUID();
+            analysisId = uuid;
             const createdAt = Date.now();
             const data: {
                 id: string;
@@ -197,14 +199,15 @@ const Upload = () => {
             
             // Try to update job state in KV - use the uuid we created earlier
             try {
-              const existingData = await kv.get(`resume:${uuid}`);
+                            if (!analysisId) throw new Error('No analysis ID available');
+                            const existingData = await kv.get(`resume:${analysisId}`);
               if (existingData) {
                 const parsed = JSON.parse(existingData);
                 parsed.jobState = 'failed';
                 parsed.lastError = errorMsg;
                 parsed.retryCount = (parsed.retryCount || 0) + 1;
-                await kv.set(`resume:${uuid}`, JSON.stringify(parsed));
-                console.log('Updated KV with failed state for UUID:', uuid);
+                                await kv.set(`resume:${analysisId}`, JSON.stringify(parsed));
+                                console.log('Updated KV with failed state for UUID:', analysisId);
               }
             } catch (kvError) {
               console.error('Failed to update KV with error state:', kvError);
