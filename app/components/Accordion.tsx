@@ -71,7 +71,7 @@ export const AccordionItem = ({
     className = "",
 }: AccordionItemProps) => {
     return (
-        <div className={`overflow-hidden border-b border-gray-200 ${className}`}>
+        <div className={`overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${className}`}>
             {children}
         </div>
     );
@@ -121,10 +121,12 @@ export const AccordionHeader = ({
     return (
         <button
             onClick={handleClick}
+            aria-expanded={isActive}
+            aria-controls={`accordion-content-${itemId}`}
             className={`
-        w-full px-4 py-3 text-left
-        focus:outline-none
-        transition-colors duration-200 flex items-center justify-between cursor-pointer
+        flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition-all duration-200
+        hover:bg-slate-50
+        focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100
         ${className}
       `}
         >
@@ -153,13 +155,14 @@ export const AccordionContent = ({
 
     return (
         <div
+            id={`accordion-content-${itemId}`}
             className={`
-        overflow-hidden transition-all duration-300 ease-in-out
-        ${isActive ? "max-h-fit opacity-100" : "max-h-0 opacity-0"}
+        grid transition-[grid-template-rows,opacity] duration-300 ease-out
+        ${isActive ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}
         ${className}
       `}
         >
-            <div className="px-4 py-3 ">{children}</div>
+            <div className="min-h-0 overflow-hidden px-5 pb-5 pt-0">{children}</div>
         </div>
     );
 };

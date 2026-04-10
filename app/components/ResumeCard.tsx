@@ -19,34 +19,42 @@ const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imageP
     }, [imagePath]);
 
     return (
-        <Link to={`/resume/${id}`} className="resume-card animate-in fade-in duration-1000">
-            <div className="resume-card-header">
-                <div className="flex flex-col gap-2">
-                    {companyName && <h2 className="!text-black font-bold break-words">{companyName}</h2>}
-                    {jobTitle && <h3 className="text-lg break-words text-gray-500">{jobTitle}</h3>}
-                    {!companyName && !jobTitle && <h2 className="!text-black font-bold">Resume</h2>}
+        <Link
+            to={`/resume/${id}`}
+            className="group flex h-full flex-col gap-5 rounded-2xl border border-white/70 bg-white/85 p-4 shadow-[0_16px_42px_rgba(15,23,42,0.1)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.14)]"
+        >
+            <div className="flex min-h-[90px] items-start justify-between gap-3">
+                <div className="flex flex-col gap-1.5">
+                    {companyName && <h2 className="break-words text-xl font-bold text-slate-900">{companyName}</h2>}
+                    {jobTitle && <h3 className="break-words text-sm font-medium text-slate-600">{jobTitle}</h3>}
+                    {!companyName && !jobTitle && <h2 className="text-xl font-bold text-slate-900">Resume</h2>}
                 </div>
                 <div className="flex-shrink-0">
                     {feedback && feedback.overallScore !== undefined ? (
                         <ScoreCircle score={feedback.overallScore} />
                     ) : (
-                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                            <span className="text-xs text-gray-500">--</span>
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                            <span className="text-xs text-slate-500">--</span>
                         </div>
                     )}
                 </div>
             </div>
             {resumeUrl && (
-                <div className="gradient-border animate-in fade-in duration-1000">
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white">
                     <div className="w-full h-full">
                         <img
                             src={resumeUrl}
                             alt="resume"
-                            className="w-full h-[350px] max-sm:h-[200px] object-cover object-top"
+                            className="h-[300px] w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.02] max-sm:h-[220px]"
                         />
                     </div>
                 </div>
-                )}
+            )}
+
+            <div className="mt-auto flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">View Analysis</p>
+                <span className="text-sm font-semibold text-indigo-700">Open →</span>
+            </div>
         </Link>
     )
 });

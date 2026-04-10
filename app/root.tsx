@@ -12,7 +12,7 @@ import "./app.css";
 import { usePuterStore } from "./lib/puter";
 import { initializeAuth } from "./lib/auth";
 import "./lib/testSetup";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -29,8 +29,6 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: ReactNode }) {
   const init = usePuterStore((s) => s.init);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
     initializeAuth();
@@ -64,16 +62,7 @@ export function Layout({ children }: { children: ReactNode }) {
           : "light";
 
     document.documentElement.classList.toggle("dark", initialTheme === "dark");
-    setTheme(initialTheme);
-    setThemeReady(true);
   }, []);
-
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    document.documentElement.classList.toggle("dark", nextTheme === "dark");
-    localStorage.setItem("theme", nextTheme);
-    setTheme(nextTheme);
-  };
 
   return (
     <html lang="en">
@@ -85,22 +74,6 @@ export function Layout({ children }: { children: ReactNode }) {
         <style>{`html,body{font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;}`}</style>
       </head>
       <body>
-        {themeReady && (
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="theme-toggle"
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-          >
-            <span className="text-lg" aria-hidden="true">
-              {theme === "dark" ? "Sun" : "Moon"}
-            </span>
-            <span className="text-xs font-semibold uppercase tracking-wide">
-              {theme === "dark" ? "Light" : "Dark"}
-            </span>
-          </button>
-        )}
         {children}
         <ScrollRestoration />
         <Scripts />

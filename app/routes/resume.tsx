@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePuterStore } from "../lib/puter";
 import { useAuthStore } from "../lib/auth";
 import Summary from "../components/Summary";
@@ -35,6 +35,35 @@ const Resume = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [usedFallbackAnalysis, setUsedFallbackAnalysis] = useState(false);
   const navigate = useNavigate();
+
+  const scoreLift = useMemo(() => {
+    if (!feedback) return 0;
+    return Math.min(24, Math.max(8, Math.round((100 - feedback.overallScore) * 0.35)));
+  }, [feedback]);
+
+  const copyAllSuggestions = async () => {
+    const sections: string[] = [];
+
+    if (feedback) {
+      sections.push(`Overall score: ${feedback.overallScore}/100`);
+      sections.push(`ATS: ${feedback.ATS.score}/100`);
+      sections.push(`Tone & Style: ${feedback.toneAndStyle.score}/100`);
+      sections.push(`Content: ${feedback.content.score}/100`);
+      sections.push(`Structure: ${feedback.structure.score}/100`);
+      sections.push(`Skills: ${feedback.skills.score}/100`);
+      sections.push("");
+      sections.push("ATS tips:");
+      feedback.ATS.tips.forEach((tip) => sections.push(`- ${tip.tip}`));
+      sections.push("");
+      sections.push("Action checklist:");
+      studentFeedback?.actionChecklist.forEach((item) => sections.push(`- ${item}`));
+      sections.push("");
+      sections.push("Keyword gaps:");
+      roleKeywordAnalysis?.missingKeywords.forEach((keyword) => sections.push(`- ${keyword}`));
+    }
+
+    await navigator.clipboard.writeText(sections.join("\n"));
+  };
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -228,155 +257,232 @@ const Resume = () => {
     };
   }, [imageUrl]);
 
+  const loadingSkeleton = !feedback && !loadingError;
+
   return (
-    <main className="!pt-0">
+    <main className="review-shell min-h-screen overflow-hidden !pt-0">
       <nav className="resume-nav">
         <Link to="/" className="back-button">
           <img src="/icons/back.svg" alt="logo" className="w-2.5 h-2.5" />
           <span className="text-gray-800 text-sm font-semibold">Back to Homepage</span>
         </Link>
+        <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 md:flex">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          Premium dashboard
+        </div>
       </nav>
-      <div className="flex flex-row w-full max-lg:flex-col-reverse">
-        <section className="feedback-section bg-[url('/images/bg-small.svg')] bg-cover h-[100vh] sticky top-0 items-center justify-center">
-          {loadingError && !imageUrl ? (
-            <div className="text-center p-5">
-              <p className="text-red-600 font-semibold">{loadingError}</p>
-              <Link to="/upload" className="text-blue-600 underline mt-3 inline-block">
-                Upload a new resume
-              </Link>
-            </div>
-          ) : imageUrl && resumeUrl ? (
-            <div className="animate-in fade-in duration-1000 gradient-border max-sm:m-0 h-[90%] max-wxl:h-fit w-fit">
-              <a href={resumeUrl} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={imageUrl}
-                  className="w-full h-full object-contain rounded-2xl"
-                  title="resume"
-                />
+      <section className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8 md:py-8 lg:py-10">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Resume review dashboard</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              Resume Review
+            </h1>
+          </div>
+          {feedback && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void copyAllSuggestions()}
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100"
+              >
+                Copy all suggestions
+              </button>
+              <a
+                href={resumeUrl || undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-4 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(79,70,229,0.34)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(79,70,229,0.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100"
+              >
+                Open PDF
               </a>
             </div>
-          ) : (
-            <div className="text-center p-5">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="text-gray-600 mt-4">Loading resume...</p>
-            </div>
           )}
-        </section>
+        </div>
 
-        <section className="feedback-section">
-          <h2 className="text-4xl !text-black font-bold">Resume Review</h2>
-
-          {pollingTimeout ? (
-            <div className="flex flex-col items-center justify-center gap-4 text-center">
-              <div className="text-red-600 text-lg font-semibold">Analysis Timeout</div>
-              <p className="text-gray-700 max-w-md">
-                The AI analysis is taking longer than expected. This might be due to:
-              </p>
-              <ul className="text-left text-gray-600 text-sm space-y-2 ml-8">
-                <li>High server load and a busy AI service</li>
-                <li>Large resume file size</li>
-                <li>Very long job description</li>
-                <li>Network connectivity issues</li>
-              </ul>
-              <div className="flex gap-4 mt-4">
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Check Status Again
-                </button>
-                <Link
-                  to="/upload"
-                  className="px-6 py-2 border-2 border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                >
-                  Upload New Resume
-                </Link>
-              </div>
-            </div>
-          ) : loadingError ? (
-            <div className="text-red-600 text-center">
-              <p className="mb-4">{loadingError}</p>
-              <Link to="/upload" className="text-blue-600 underline">
-                Upload a new resume
-              </Link>
-            </div>
-          ) : feedback ? (
-            <div className="flex flex-col gap-8 animate-in fade-in duration-1000">
-              {usedFallbackAnalysis && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-                  <p className="font-semibold">Fallback analysis mode</p>
-                  <p className="text-sm">
-                    Live AI service was unavailable, so this review used a local fallback analysis.
-                  </p>
+        <div className="grid gap-8 lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.35fr)]">
+          <aside className="sticky top-24 h-fit">
+            <div className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl md:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Resume preview</p>
+                  <p className="mt-1 text-sm text-slate-600">Pinned while you review the feedback.</p>
                 </div>
-              )}
-              {jobState && jobState !== "done" && (
-                <ProgressStateCard
-                  jobState={jobState}
-                  lastError={lastError}
-                  retryCount={retryCount}
-                  onRetry={() => window.location.reload()}
-                />
-              )}
-              <Summary feedback={feedback} />
-              {actionableRewrites.length > 0 && (
-                <ActionableRewriteCard rewrites={actionableRewrites} />
-              )}
-              {studentFeedback && <StudentFeedbackCard data={studentFeedback} />}
-              {roleKeywordAnalysis && <RoleKeywordAnalysisCard data={roleKeywordAnalysis} />}
-              {generatedProjectBullets.length > 0 && (
-                <ProjectBulletGenerator bullets={generatedProjectBullets} />
-              )}
-              <ATS score={feedback.ATS.score || 0} suggestions={feedback.ATS.tips || []} />
-              <Details feedback={feedback} />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {jobState && jobState !== "done" && (
-                <ProgressStateCard
-                  jobState={jobState}
-                  lastError={lastError}
-                  retryCount={retryCount}
-                  onRetry={() => window.location.reload()}
-                />
-              )}
-              {jobState === "failed" ? (
-                <div className="text-center">
-                  <p className="text-gray-700 font-semibold">
-                    The analysis stopped before feedback was generated.
-                  </p>
-                  <p className="text-gray-500 text-sm mt-2">
-                    Try again, or upload a new resume if the problem continues.
-                  </p>
+                {feedback && (
+                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-right">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Target lift</p>
+                    <p className="text-lg font-bold text-emerald-600">+{scoreLift}%</p>
+                  </div>
+                )}
+              </div>
+
+              {loadingError && !imageUrl ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
+                  <p className="font-semibold text-red-700">{loadingError}</p>
+                  <Link to="/upload" className="mt-3 inline-flex text-sm font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                    Upload a new resume
+                  </Link>
+                </div>
+              ) : imageUrl && resumeUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  <a href={resumeUrl} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={imageUrl}
+                      className="h-[74vh] w-full object-contain object-top"
+                      title="resume"
+                      alt="Resume preview"
+                    />
+                  </a>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-4">
-                  <img src="/images/resume-scan-2.gif" className="w-full max-w-md" />
-                  <div className="text-center">
-                    <p className="text-gray-700 font-semibold">AI is analyzing your resume...</p>
-                    <p className="text-gray-500 text-sm mt-2">
-                      This usually takes 2-3 minutes
-                      {elapsedTime > 0 && (
-                        <span className="font-medium"> (elapsed: {elapsedTime}s)</span>
-                      )}
-                    </p>
-                    <div className="mt-4 flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce animation-delay-200"></div>
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce animation-delay-400"></div>
-                    </div>
-                    {elapsedTime > 90 && (
-                      <p className="text-amber-600 text-sm mt-4">
-                        Taking longer than usual. The AI service may be busy.
-                      </p>
-                    )}
-                  </div>
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="h-[74vh] animate-pulse rounded-2xl bg-slate-200/70" />
+                  <p className="text-center text-sm text-slate-600">Loading resume preview...</p>
+                </div>
+              )}
+
+              {jobState && jobState !== "done" && (
+                <div className="mt-4">
+                  <ProgressStateCard
+                    jobState={jobState}
+                    lastError={lastError}
+                    retryCount={retryCount}
+                    onRetry={() => window.location.reload()}
+                  />
                 </div>
               )}
             </div>
-          )}
-        </section>
-      </div>
+          </aside>
+
+          <section className="space-y-5">
+            {pollingTimeout ? (
+              <div className="rounded-3xl border border-red-200 bg-white/90 p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                <div className="text-lg font-semibold text-red-600">Analysis Timeout</div>
+                <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                  The analysis is taking longer than expected. High server load, a long job description, or a large file can slow things down.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-5 text-sm font-semibold text-white"
+                  >
+                    Check Status Again
+                  </button>
+                  <Link
+                    to="/upload"
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700"
+                  >
+                    Upload New Resume
+                  </Link>
+                </div>
+              </div>
+            ) : loadingError ? (
+              <div className="rounded-3xl border border-red-200 bg-white/90 p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                <p className="font-semibold text-red-700">{loadingError}</p>
+                <Link to="/upload" className="mt-3 inline-flex text-sm font-semibold text-indigo-700 underline-offset-4 hover:underline">
+                  Upload a new resume
+                </Link>
+              </div>
+            ) : feedback ? (
+              <div className="space-y-5">
+                {usedFallbackAnalysis && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm">
+                    <p className="font-semibold">Fallback analysis mode</p>
+                    <p className="text-sm">
+                      Live AI service was unavailable, so this review used a local fallback analysis.
+                    </p>
+                  </div>
+                )}
+
+                <Summary feedback={feedback} />
+
+                <div className="grid gap-5">
+                  <ATS score={feedback.ATS.score || 0} suggestions={feedback.ATS.tips || []} />
+                  {actionableRewrites.length > 0 && <ActionableRewriteCard rewrites={actionableRewrites} />}
+                  {roleKeywordAnalysis && <RoleKeywordAnalysisCard data={roleKeywordAnalysis} />}
+                  {generatedProjectBullets.length > 0 && <ProjectBulletGenerator bullets={generatedProjectBullets} />}
+                  {studentFeedback && <StudentFeedbackCard data={studentFeedback} />}
+                  <Details feedback={feedback} />
+                </div>
+              </div>
+            ) : loadingSkeleton ? (
+              <div className="space-y-5">
+                <div className="rounded-3xl border border-white/70 bg-white/90 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-6 w-40 rounded-full bg-slate-200" />
+                    <div className="h-32 rounded-2xl bg-slate-200/70" />
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="h-24 rounded-2xl bg-slate-200/70" />
+                      <div className="h-24 rounded-2xl bg-slate-200/70" />
+                      <div className="h-24 rounded-2xl bg-slate-200/70" />
+                    </div>
+                  </div>
+                </div>
+                <ProgressStateCard
+                  jobState={jobState}
+                  lastError={lastError}
+                  retryCount={retryCount}
+                  onRetry={() => window.location.reload()}
+                />
+                <div className="rounded-3xl border border-white/70 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                  <img src="/images/resume-scan-2.gif" className="mx-auto w-full max-w-md" alt="Analysis in progress" />
+                  <div className="mt-4">
+                    <p className="font-semibold text-slate-800">AI is analyzing your resume...</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      This usually takes 2-3 minutes
+                      {elapsedTime > 0 && <span className="font-medium"> (elapsed: {elapsedTime}s)</span>}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {jobState && jobState !== "done" && (
+                  <ProgressStateCard
+                    jobState={jobState}
+                    lastError={lastError}
+                    retryCount={retryCount}
+                    onRetry={() => window.location.reload()}
+                  />
+                )}
+                {jobState === "failed" ? (
+                  <div className="rounded-3xl border border-white/70 bg-white/90 p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                    <p className="font-semibold text-slate-800">
+                      The analysis stopped before feedback was generated.
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Try again, or upload a new resume if the problem continues.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-3xl border border-white/70 bg-white/90 p-8 text-center shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl">
+                    <img src="/images/resume-scan-2.gif" className="mx-auto w-full max-w-md" alt="Analysis in progress" />
+                    <div className="mt-4">
+                      <p className="font-semibold text-slate-800">AI is analyzing your resume...</p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        This usually takes 2-3 minutes
+                        {elapsedTime > 0 && (
+                          <span className="font-medium"> (elapsed: {elapsedTime}s)</span>
+                        )}
+                      </p>
+                      <div className="mt-4 flex items-center justify-center gap-2">
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-indigo-500"></div>
+                        <div className="animation-delay-200 h-2 w-2 animate-bounce rounded-full bg-indigo-500"></div>
+                        <div className="animation-delay-400 h-2 w-2 animate-bounce rounded-full bg-indigo-500"></div>
+                      </div>
+                      {elapsedTime > 90 && (
+                        <p className="mt-4 text-sm text-amber-600">
+                          Taking longer than usual. The AI service may be busy.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      </section>
     </main>
   );
 };

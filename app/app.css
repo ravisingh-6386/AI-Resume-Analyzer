@@ -168,6 +168,39 @@ form {
   .feedback-section {
     @apply flex flex-col gap-6 md:gap-8 w-full lg:w-1/2 px-4 md:px-8 py-6 max-h-fit lg:overflow-y-auto;
   }
+  .review-shell {
+    background:
+      radial-gradient(circle at 14% 18%, rgba(99, 102, 241, 0.14), transparent 36%),
+      radial-gradient(circle at 86% 10%, rgba(14, 165, 233, 0.16), transparent 30%),
+      linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%);
+  }
+  .review-panel {
+    @apply rounded-3xl border border-white/70 bg-white/90 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl;
+  }
+  .review-section-title {
+    @apply text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600;
+  }
+  .review-section-heading {
+    @apply mt-2 text-2xl md:text-3xl font-bold tracking-tight text-slate-900;
+  }
+  .review-muted {
+    @apply text-sm leading-6 text-slate-600;
+  }
+  .review-chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+  .review-stat {
+    @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-sm;
+  }
+  .review-surface {
+    @apply rounded-3xl border border-white/70 bg-white/90 shadow-[0_24px_60px_rgba(15,23,42,0.1)] backdrop-blur-xl;
+  }
+  .review-soft-card {
+    @apply rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm;
+  }
+  .review-button {
+    @apply inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100;
+  }
   .navbar {
     @apply flex flex-row justify-between items-center rounded-full p-4 w-full px-10 max-w-[1200px] mx-auto;
     background-color: var(--app-surface);
@@ -215,30 +248,12 @@ form {
   animation-delay: 0.4s;
 }
 
-.theme-toggle {
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  z-index: 120;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 999px;
-  padding: 8px 12px;
-  border: 1px solid var(--app-border);
-  background: var(--app-surface);
-  color: var(--app-text);
-  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.18);
-  cursor: pointer;
-  transition: transform 0.2s ease, background-color 0.25s ease;
-}
-
-.theme-toggle:hover {
-  transform: translateY(-1px);
-}
-
 .auth-shell {
-  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 45%, #ffe4e6 100%);
+  background:
+    radial-gradient(circle at 14% 18%, rgba(99, 102, 241, 0.18), transparent 44%),
+    radial-gradient(circle at 86% 12%, rgba(14, 165, 233, 0.2), transparent 36%),
+    radial-gradient(circle at 80% 78%, rgba(248, 113, 113, 0.15), transparent 40%),
+    linear-gradient(140deg, #f7f9fc 0%, #eef2ff 45%, #fff7ed 100%);
 }
 
 .app-shell {
@@ -246,21 +261,51 @@ form {
 }
 
 .auth-glow {
-  background: linear-gradient(to right, #818cf8, #c084fc, #f472b6);
+  background: linear-gradient(125deg, #818cf8 0%, #22d3ee 45%, #f43f5e 100%);
 }
 
 .auth-card {
-  background-color: var(--app-overlay);
-  border: 1px solid var(--app-border);
-  backdrop-filter: blur(6px);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.72));
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 22px 64px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .auth-subtitle {
   color: var(--app-text-muted);
+  max-width: 42ch;
+  margin-inline: auto;
+  line-height: 1.6;
+}
+
+.auth-title {
+  background: linear-gradient(90deg, #0f172a 0%, #3730a3 55%, #0f172a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.auth-card-enter {
+  animation: authCardEnter 0.5s ease-out both;
+}
+
+@keyframes authCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 html.dark .auth-shell {
-  background: radial-gradient(circle at 15% 20%, #1f2937 0%, #0b1220 60%, #050913 100%);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.25), transparent 40%),
+    radial-gradient(circle at 78% 20%, rgba(14, 165, 233, 0.22), transparent 35%),
+    linear-gradient(155deg, #0b1220 0%, #121a2f 55%, #1f2937 100%);
 }
 
 html.dark .app-shell {
@@ -284,6 +329,86 @@ html.dark .text-gray-500 {
 html.dark .border-gray-200,
 html.dark .border-gray-300 {
   border-color: var(--app-border) !important;
+}
+
+html.dark .review-shell {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(99, 102, 241, 0.2), transparent 34%),
+    radial-gradient(circle at 86% 10%, rgba(14, 165, 233, 0.2), transparent 30%),
+    linear-gradient(180deg, #050913 0%, #0b1220 45%, #111827 100%);
+}
+
+html.dark .review-shell .bg-white {
+  background-color: rgba(17, 24, 39, 0.9) !important;
+}
+
+html.dark .review-shell .bg-slate-50,
+html.dark .review-shell .bg-slate-50\/70,
+html.dark .review-shell .bg-slate-50\/80 {
+  background-color: rgba(15, 23, 42, 0.82) !important;
+}
+
+html.dark .review-shell .bg-emerald-50,
+html.dark .review-shell .bg-emerald-50\/80,
+html.dark .review-shell .bg-amber-50,
+html.dark .review-shell .bg-amber-50\/80,
+html.dark .review-shell .bg-rose-50 {
+  background-color: rgba(15, 23, 42, 0.82) !important;
+}
+
+html.dark .review-shell .border-slate-200,
+html.dark .review-shell .border-slate-200\/80,
+html.dark .review-shell .border-slate-300 {
+  border-color: rgba(51, 65, 85, 0.9) !important;
+}
+
+html.dark .review-shell .text-slate-900,
+html.dark .review-shell .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+html.dark .review-shell .text-slate-700,
+html.dark .review-shell .text-slate-600,
+html.dark .review-shell .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .review-shell .text-emerald-600,
+html.dark .review-shell .text-emerald-700,
+html.dark .review-shell .text-emerald-800,
+html.dark .review-shell .text-emerald-900 {
+  color: #34d399 !important;
+}
+
+html.dark .review-shell .text-amber-600,
+html.dark .review-shell .text-amber-700,
+html.dark .review-shell .text-amber-800,
+html.dark .review-shell .text-amber-900 {
+  color: #fbbf24 !important;
+}
+
+html.dark .review-shell .text-rose-600,
+html.dark .review-shell .text-rose-700,
+html.dark .review-shell .text-rose-800,
+html.dark .review-shell .text-rose-900 {
+  color: #fb7185 !important;
+}
+
+html.dark .review-panel,
+html.dark .review-surface {
+  background: rgba(17, 24, 39, 0.9) !important;
+  border-color: rgba(51, 65, 85, 0.9) !important;
+}
+
+html.dark .review-muted,
+html.dark .review-muted * {
+  color: #cbd5e1 !important;
+}
+
+html.dark .review-stat,
+html.dark .review-soft-card {
+  background: rgba(15, 23, 42, 0.8) !important;
+  border-color: rgba(51, 65, 85, 0.9) !important;
 }
 
 html.dark .shadow-xl,
