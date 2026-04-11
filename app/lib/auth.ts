@@ -6,24 +6,96 @@ interface AuthUser {
   name: string;
 }
 
+interface SendOtpResponse {
+  message: string;
+  expiresIn: number;
+  resendCount: number;
+  maxResend: number;
+  devOtp?: string;
+  deliveryMode?: "smtp" | "development";
+}
+
+interface VerifyOtpResponse {
+  message: string;
+  user: AuthUser;
+}
+
+interface LoginResponse {
+  message: string;
+  user: AuthUser;
+}
+
+interface ForgotPasswordResponse {
+  message: string;
+  expiresIn: number;
+  resendCount: number;
+  maxResend: number;
+  devOtp?: string;
+  deliveryMode?: "smtp" | "development";
+}
+
 interface AuthStore {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  pendingSignupEmail: string | null;
+  isOtpStep: boolean;
+  resendCount: number;
+  maxResendAttempts: number;
+  otpExpiresAt: number | null;
+  signupDevOtp: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
+  verifySignupOtp: (otp: string) => Promise<void>;
+  resendSignupOtp: () => Promise<void>;
+  resetSignupOtpState: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
-  forgotPassword: (email: string) => Promise<void>;
-  resetPassword: (email: string, newPassword: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<ForgotPasswordResponse>;
+  resetPassword: (email: string, newPassword: string, otp: string) => Promise<void>;
 }
+
+const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
+  "http://localhost:4000";
+
+const authApi = async <T>(endpoint: string, payload: Record<string, unknown>) => {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}/api/auth/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach auth server. Start API with npm run dev:api and verify VITE_API_BASE_URL."
+    );
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((data as { message?: string }).message || "Request failed");
+  }
+
+  return data as T;
+};
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  pendingSignupEmail: null,
+  isOtpStep: false,
+  resendCount: 0,
+  maxResendAttempts: 3,
+  otpExpiresAt: null,
+  signupDevOtp: null,
 
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
@@ -38,21 +110,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
         throw new Error("Please enter a valid email address");
       }
 
-      // Get stored users from localStorage (for demo)
-      const usersJson = localStorage.getItem("users");
-      const users = usersJson ? JSON.parse(usersJson) : [];
+      const data = await authApi<LoginResponse>("login", {
+        email,
+        password,
+      });
 
-      // Check if user exists and password matches
-      const user = users.find(
-        (u: any) => u.email === email && u.password === password
-      );
-
-      if (!user) {
-        throw new Error("Invalid email or password");
-      }
-
-      // Set authenticated user
-      const authUser = { id: user.id, email: user.email, name: user.name };
+      const authUser = data.user;
       localStorage.setItem("authUser", JSON.stringify(authUser));
       set({
         user: authUser,
@@ -82,32 +145,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
         throw new Error("Password must be at least 6 characters");
       }
 
-      // Get stored users
-      const usersJson = localStorage.getItem("users");
-      const users = usersJson ? JSON.parse(usersJson) : [];
+      const data = await authApi<SendOtpResponse>("send-otp", { email, password, name });
 
-      // Check if user already exists
-      if (users.some((u: any) => u.email === email)) {
-        throw new Error("Email already registered");
-      }
-
-      // Create new user
-      const newUser = {
-        id: `user_${Date.now()}`,
-        email,
-        password,
-        name,
-      };
-
-      users.push(newUser);
-      localStorage.setItem("users", JSON.stringify(users));
-
-      // Auto login after signup
-      const authUser = { id: newUser.id, email: newUser.email, name: newUser.name };
-      localStorage.setItem("authUser", JSON.stringify(authUser));
       set({
-        user: authUser,
-        isAuthenticated: true,
+        pendingSignupEmail: email,
+        isOtpStep: true,
+        resendCount: data.resendCount,
+        maxResendAttempts: data.maxResend,
+        otpExpiresAt: Date.now() + data.expiresIn * 1000,
+        signupDevOtp: data.devOtp || null,
         isLoading: false,
       });
     } catch (error) {
@@ -115,6 +161,79 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ error: message, isLoading: false });
       throw error;
     }
+  },
+
+  verifySignupOtp: async (otp: string) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const pendingEmail = useAuthStore.getState().pendingSignupEmail;
+
+      if (!pendingEmail) {
+        throw new Error("Signup session expired. Please start again.");
+      }
+
+      if (!/^\d{6}$/.test(otp.trim())) {
+        throw new Error("Please enter a valid 6-digit OTP");
+      }
+
+      const data = await authApi<VerifyOtpResponse>("verify-otp", {
+        email: pendingEmail,
+        otp: otp.trim(),
+      });
+
+      localStorage.setItem("authUser", JSON.stringify(data.user));
+      set({
+        user: data.user,
+        isAuthenticated: true,
+        isLoading: false,
+        isOtpStep: false,
+        pendingSignupEmail: null,
+        otpExpiresAt: null,
+        resendCount: 0,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "OTP verification failed";
+      set({ error: message, isLoading: false });
+      throw error;
+    }
+  },
+
+  resendSignupOtp: async () => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const pendingEmail = useAuthStore.getState().pendingSignupEmail;
+
+      if (!pendingEmail) {
+        throw new Error("Signup session expired. Please start again.");
+      }
+
+      const data = await authApi<SendOtpResponse>("send-otp", { email: pendingEmail });
+
+      set({
+        resendCount: data.resendCount,
+        maxResendAttempts: data.maxResend,
+        otpExpiresAt: Date.now() + data.expiresIn * 1000,
+        signupDevOtp: data.devOtp || null,
+        isLoading: false,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to resend OTP";
+      set({ error: message, isLoading: false });
+      throw error;
+    }
+  },
+
+  resetSignupOtpState: () => {
+    set({
+      isOtpStep: false,
+      pendingSignupEmail: null,
+      otpExpiresAt: null,
+      resendCount: 0,
+      maxResendAttempts: 3,
+      signupDevOtp: null,
+    });
   },
 
   logout: async () => {
@@ -129,7 +248,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
   forgotPassword: async (email: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Validate inputs
       if (!email) {
         throw new Error("Email is required");
       }
@@ -138,28 +256,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
         throw new Error("Please enter a valid email address");
       }
 
-      // Get stored users
-      const usersJson = localStorage.getItem("users");
-      const users = usersJson ? JSON.parse(usersJson) : [];
-
-      // Check if user exists
-      const user = users.find((u: any) => u.email === email);
-      if (!user) {
-        throw new Error("No account found with this email address");
-      }
-
-      // Generate reset token (simple token for demo)
-      const resetToken = `reset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Store reset token with expiry (10 minutes)
-      const resetTokens = JSON.parse(localStorage.getItem("resetTokens") || "{}");
-      resetTokens[email] = {
-        token: resetToken,
-        expiresAt: Date.now() + 10 * 60 * 1000,
-      };
-      localStorage.setItem("resetTokens", JSON.stringify(resetTokens));
+      const data = await authApi<ForgotPasswordResponse>("forgot-password", { email });
 
       set({ isLoading: false });
+      return data;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to send reset link";
       set({ error: message, isLoading: false });
@@ -167,41 +267,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 
-  resetPassword: async (email: string, newPassword: string) => {
+  resetPassword: async (email: string, newPassword: string, otp: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Validate inputs
-      if (!email || !newPassword) {
-        throw new Error("Email and password are required");
+      if (!email || !newPassword || !otp) {
+        throw new Error("Email, OTP, and new password are required");
       }
 
       if (newPassword.length < 6) {
         throw new Error("Password must be at least 6 characters");
       }
 
-      // Get stored users
-      const usersJson = localStorage.getItem("users");
-      const users = usersJson ? JSON.parse(usersJson) : [];
-
-      // Find user by email
-      const userIndex = users.findIndex((u: any) => u.email === email);
-      if (userIndex === -1) {
-        throw new Error("User not found");
-      }
-
-      // Verify reset token (in real app, you'd verify the actual token)
-      const resetTokens = JSON.parse(localStorage.getItem("resetTokens") || "{}");
-      if (!resetTokens[email] || resetTokens[email].expiresAt < Date.now()) {
-        throw new Error("Reset link has expired. Please try again.");
-      }
-
-      // Update password
-      users[userIndex].password = newPassword;
-      localStorage.setItem("users", JSON.stringify(users));
-
-      // Clear reset token
-      delete resetTokens[email];
-      localStorage.setItem("resetTokens", JSON.stringify(resetTokens));
+      await authApi<{ message: string }>("reset-password", {
+        email,
+        newPassword,
+        otp,
+      });
 
       set({ isLoading: false });
     } catch (error) {

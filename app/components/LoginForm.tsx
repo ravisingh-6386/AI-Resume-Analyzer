@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useAuthStore } from "../lib/auth";
 
@@ -9,7 +9,9 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
   const [touched, setTouched] = useState({ email: false, password: false });
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   const emailError =
     touched.email && !email.trim()
@@ -27,8 +29,8 @@ export default function LoginForm() {
 
   const isFormInvalid = Boolean(emailError || passwordError || !email || !password);
   const sharedInputClasses =
-    "w-full h-14 rounded-xl border bg-white/80 text-[17px] leading-tight text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_8px_22px_rgba(15,23,42,0.06)] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60";
-  const emailInputClasses = `${sharedInputClasses} pl-12 pr-4 ${
+    "w-full h-14 rounded-xl border bg-white/80 text-base leading-tight text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_8px_22px_rgba(15,23,42,0.06)] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60";
+  const emailInputClasses = `${sharedInputClasses} pl-12 pr-20 ${
     emailError ? "border-red-300 focus:border-red-400" : "border-slate-200 focus:border-indigo-400"
   }`;
   const passwordInputClasses = `${sharedInputClasses} pl-12 pr-16 ${
@@ -66,6 +68,29 @@ export default function LoginForm() {
     }
   };
 
+  const handleEmailFocus = () => {
+    const input = emailInputRef.current;
+    if (!input) return;
+
+    const end = input.value.length;
+    requestAnimationFrame(() => {
+      input.setSelectionRange(end, end);
+      input.scrollLeft = input.scrollWidth;
+    });
+  };
+
+  const handleCopyEmail = async () => {
+    if (!email.trim()) return;
+
+    try {
+      await navigator.clipboard.writeText(email.trim());
+      setCopiedEmail(true);
+      window.setTimeout(() => setCopiedEmail(false), 1200);
+    } catch {
+      setCopiedEmail(false);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5 w-full" noValidate>
       <div className="flex flex-col gap-2">
@@ -96,12 +121,15 @@ export default function LoginForm() {
             </svg>
           </span>
           <input
+            ref={emailInputRef}
             id="email"
             type="email"
             aria-label="Email address"
             aria-invalid={Boolean(emailError)}
-            aria-describedby={emailError ? "email-error" : undefined}
+            aria-describedby={emailError ? "email-error" : "email-help"}
             placeholder="Enter your email"
+            title={email}
+            dir="ltr"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -109,14 +137,30 @@ export default function LoginForm() {
                 setTouched((prev) => ({ ...prev, email: true }));
               }
             }}
+            onFocus={handleEmailFocus}
             onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
             disabled={isLoading}
             className={emailInputClasses}
           />
+          <button
+            type="button"
+            onClick={handleCopyEmail}
+            disabled={!email.trim()}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Copy email"
+            title={copiedEmail ? "Copied" : "Copy email"}
+          >
+            {copiedEmail ? "Copied" : "Copy"}
+          </button>
         </div>
         {emailError && (
           <p id="email-error" className="text-xs font-medium text-red-600" role="alert">
             {emailError}
+          </p>
+        )}
+        {!emailError && email && (
+          <p id="email-help" className="text-xs text-slate-500" aria-live="polite">
+            Full email is visible on hover; focus jumps to the end for long addresses.
           </p>
         )}
       </div>

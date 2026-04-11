@@ -240,6 +240,29 @@ form {
     opacity: 1;
   }
 }
+
+@keyframes profileDropdownEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.profile-dropdown-enter {
+  animation: profileDropdownEnter 0.16s ease-out both;
+  transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-dropdown-enter {
+    animation: none;
+  }
+}
+
 .animation-delay-200 {
   animation-delay: 0.2s;
 }
