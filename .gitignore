@@ -1,6 +1,9 @@
 .DS_Store
 /node_modules/
 
+# Local environment variables
+.env
+
 # React Router
 /.react-router/
 /build/

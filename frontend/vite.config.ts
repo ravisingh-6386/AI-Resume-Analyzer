@@ -4,14 +4,5 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  publicDir: "frontend/public",
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:4000",
-        changeOrigin: true,
-      },
-    },
-  },
   plugins: [tsconfigPaths(), tailwindcss(), reactRouter()],
 });
