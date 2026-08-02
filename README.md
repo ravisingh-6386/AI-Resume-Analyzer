@@ -1,5 +1,8 @@
 # AI Resume Analyzer
 
+https://www.youtube.com/watch?v=VsF4jCFtpe4&t=5s
+
+
 AI Resume Analyzer is a full-stack project for uploading, parsing, and analyzing resumes with AI-powered feedback.
 
 ## Repository Structure
