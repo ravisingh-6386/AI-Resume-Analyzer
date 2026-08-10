@@ -22,6 +22,12 @@ const MAX_RESUME_PAGE_WAIT_MS = 45 * 1000;
 const LEGACY_IN_PROGRESS_MAX_WAIT_MS = 15 * 1000;
 const POLL_INTERVAL_MS = 4000;
 
+const revokeObjectUrl = (url: string) => {
+  if (url.startsWith("blob:")) {
+    URL.revokeObjectURL(url);
+  }
+};
+
 const Resume = () => {
   const { isLoading, fs, kv } = usePuterStore();
   const { isAuthenticated } = useAuthStore();
@@ -37,9 +43,9 @@ const Resume = () => {
   const [lastError, setLastError] = useState<string | undefined>();
   const [retryCount, setRetryCount] = useState(0);
   const [loadingError, setLoadingError] = useState("");
+  const [previewError, setPreviewError] = useState("");
   const [pollingTimeout, setPollingTimeout] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [usedFallbackAnalysis, setUsedFallbackAnalysis] = useState(false);
   const navigate = useNavigate();
 
   const scoreLift = useMemo(() => {
@@ -90,6 +96,7 @@ const Resume = () => {
 
     setPollingTimeout(false);
     setLoadingError("");
+    setPreviewError("");
     setElapsedTime(0);
 
     const shouldStopPolling = (data: Resume | null) =>
@@ -104,7 +111,6 @@ const Resume = () => {
 
     const loadResume = async (): Promise<Resume | null> => {
       try {
-        console.log(`Loading resume with id: ${id}`);
         const resume = await kv.get(`resume:${id}`);
 
         if (!resume) {
@@ -115,7 +121,22 @@ const Resume = () => {
         }
 
         const data = JSON.parse(resume) as Resume;
-        console.log("Resume data loaded:", data);
+        const hasFeedback = Boolean(data.feedback);
+
+        if (hasFeedback) {
+          setFeedback(data.feedback);
+          setStudentFeedback(data.studentFeedback || null);
+          setRoleKeywordAnalysis(data.roleKeywordAnalysis || null);
+          setGeneratedProjectBullets(
+            Array.isArray(data.generatedProjectBullets) ? data.generatedProjectBullets : []
+          );
+          setActionableRewrites(
+            Array.isArray(data.actionableRewrites) ? data.actionableRewrites : []
+          );
+          setJobState(data.jobState);
+          setLastError(data.lastError);
+          setRetryCount(data.retryCount || 0);
+        }
 
         const createdAt = data.createdAt || 0;
         const isInProgress = data.jobState === "queued" || data.jobState === "processing";
@@ -151,65 +172,69 @@ const Resume = () => {
           return staleData;
         }
 
-        // Load file blobs only once (checked via existing URLs in state)
-        if (resumeUrl === "" || imageUrl === "") {
-          const resumeBlob = await fs.read(data.resumePath);
-          if (!resumeBlob) {
-            if (isActive) {
-              setLoadingError("Failed to load resume file");
+        const storedPreviewUrl =
+          typeof data.imagePreviewDataUrl === "string" && data.imagePreviewDataUrl.startsWith("data:image/")
+            ? data.imagePreviewDataUrl
+            : "";
+
+        // Load file blobs only once. The preview image should still load even if the PDF is unavailable.
+        if ((resumeUrl === "" || imageUrl === "") && (data.resumePath || data.imagePath || storedPreviewUrl)) {
+          let nextResumeUrl = "";
+          let nextImageUrl = "";
+
+          if (resumeUrl === "" && data.resumePath) {
+            const resumeBlob = await fs.read(data.resumePath).catch(() => undefined);
+            if (resumeBlob) {
+              nextResumeUrl = URL.createObjectURL(
+                new Blob([resumeBlob], { type: "application/pdf" })
+              );
             }
-            return null;
           }
 
-          const nextResumeUrl = URL.createObjectURL(
-            new Blob([resumeBlob], { type: "application/pdf" })
-          );
-
-          const imageBlob = await fs.read(data.imagePath);
-          if (!imageBlob) {
-            URL.revokeObjectURL(nextResumeUrl);
-            if (isActive) {
-              setLoadingError("Failed to load resume preview");
+          if (imageUrl === "" && data.imagePath) {
+            const imageBlob = await fs.read(data.imagePath).catch(() => undefined);
+            if (imageBlob) {
+              nextImageUrl = URL.createObjectURL(imageBlob);
             }
-            return null;
           }
 
-          const nextImageUrl = URL.createObjectURL(imageBlob);
+          if (!nextImageUrl && imageUrl === "" && storedPreviewUrl) {
+            nextImageUrl = storedPreviewUrl;
+          }
 
           if (!isActive) {
-            URL.revokeObjectURL(nextResumeUrl);
-            URL.revokeObjectURL(nextImageUrl);
+            if (nextResumeUrl) revokeObjectUrl(nextResumeUrl);
+            if (nextImageUrl) revokeObjectUrl(nextImageUrl);
             return null;
           }
 
-          setResumeUrl((currentUrl) => {
-            if (currentUrl) {
-              URL.revokeObjectURL(currentUrl);
-            }
-            return nextResumeUrl;
-          });
-          setImageUrl((currentUrl) => {
-            if (currentUrl) {
-              URL.revokeObjectURL(currentUrl);
-            }
-            return nextImageUrl;
-          });
+          if (nextResumeUrl) {
+            setResumeUrl((currentUrl) => {
+              if (currentUrl) {
+                revokeObjectUrl(currentUrl);
+              }
+              return nextResumeUrl;
+            });
+          }
+
+          if (nextImageUrl) {
+            setPreviewError("");
+            setImageUrl((currentUrl) => {
+              if (currentUrl) {
+                revokeObjectUrl(currentUrl);
+              }
+              return nextImageUrl;
+            });
+          } else if (hasFeedback && imageUrl === "") {
+            setPreviewError("Resume preview is unavailable.");
+          } else if (!hasFeedback && imageUrl === "") {
+            setLoadingError("Failed to load resume preview");
+          }
+        } else if (hasFeedback && !imageUrl) {
+          setPreviewError("Resume preview is unavailable.");
         }
 
-        if (data.feedback) {
-          setFeedback(data.feedback);
-          setStudentFeedback(data.studentFeedback || null);
-          setRoleKeywordAnalysis(data.roleKeywordAnalysis || null);
-          setGeneratedProjectBullets(
-            Array.isArray(data.generatedProjectBullets) ? data.generatedProjectBullets : []
-          );
-          setActionableRewrites(
-            Array.isArray(data.actionableRewrites) ? data.actionableRewrites : []
-          );
-          setUsedFallbackAnalysis(Boolean(data.usedFallbackAnalysis));
-          console.log("Feedback loaded:", data.feedback);
-        } else {
-          console.log("No feedback available yet");
+        if (!hasFeedback) {
           // Only update job state if no feedback yet
           setJobState(data.jobState);
           setLastError(data.lastError);
@@ -251,7 +276,6 @@ const Resume = () => {
 
       pollInterval = setInterval(async () => {
         pollCount++;
-        console.log(`Polling for feedback update... (attempt ${pollCount}/${maxPolls})`);
         const latestData = await loadResume();
 
         if (!isActive) {
@@ -294,7 +318,7 @@ const Resume = () => {
   useEffect(() => {
     return () => {
       if (resumeUrl) {
-        URL.revokeObjectURL(resumeUrl);
+        revokeObjectUrl(resumeUrl);
       }
     };
   }, [resumeUrl]);
@@ -302,7 +326,7 @@ const Resume = () => {
   useEffect(() => {
     return () => {
       if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
+        revokeObjectUrl(imageUrl);
       }
     };
   }, [imageUrl]);
@@ -339,14 +363,16 @@ const Resume = () => {
               >
                 Copy all suggestions
               </button>
-              <a
-                href={resumeUrl || undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-4 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(79,70,229,0.34)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(79,70,229,0.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100"
-              >
-                Open PDF
-              </a>
+              {resumeUrl ? (
+                <a
+                  href={resumeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-4 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(79,70,229,0.34)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(79,70,229,0.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100"
+                >
+                  Open PDF
+                </a>
+              ) : null}
             </div>
           )}
         </div>
@@ -367,7 +393,7 @@ const Resume = () => {
                 )}
               </div>
 
-              {loadingError && !imageUrl ? (
+              {loadingError && !feedback && !imageUrl ? (
                 isMissingResumeError ? (
                   <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
                     <div className="h-[74vh] rounded-2xl bg-slate-200/70" />
@@ -381,16 +407,45 @@ const Resume = () => {
                     </Link>
                   </div>
                 )
-              ) : imageUrl && resumeUrl ? (
+              ) : imageUrl ? (
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                  <a href={resumeUrl} target="_blank" rel="noopener noreferrer">
+                  {resumeUrl ? (
+                    <a href={resumeUrl} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={imageUrl}
+                        className="h-[74vh] w-full object-contain object-top"
+                        title="resume"
+                        alt="Resume preview"
+                      />
+                    </a>
+                  ) : (
                     <img
                       src={imageUrl}
                       className="h-[74vh] w-full object-contain object-top"
                       title="resume"
                       alt="Resume preview"
                     />
-                  </a>
+                  )}
+                </div>
+              ) : resumeUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <object
+                    data={`${resumeUrl}#toolbar=0&navpanes=0&view=FitH`}
+                    type="application/pdf"
+                    className="h-[74vh] w-full bg-white"
+                    aria-label="Resume PDF preview"
+                  >
+                    <iframe
+                      src={`${resumeUrl}#toolbar=0&navpanes=0&view=FitH`}
+                      title="Resume PDF preview"
+                      className="h-[74vh] w-full bg-white"
+                    />
+                  </object>
+                </div>
+              ) : previewError ? (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="h-[74vh] rounded-2xl bg-slate-200/70" />
+                  <p className="text-center text-sm text-slate-600">{previewError}</p>
                 </div>
               ) : (
                 <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -443,15 +498,6 @@ const Resume = () => {
               </div>
             ) : feedback ? (
               <div className="space-y-5">
-                {usedFallbackAnalysis && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm">
-                    <p className="font-semibold">Fallback analysis mode</p>
-                    <p className="text-sm">
-                      Live AI service was unavailable, so this review used a local fallback analysis.
-                    </p>
-                  </div>
-                )}
-
                 <Summary feedback={feedback} />
 
                 <div className="grid gap-5">

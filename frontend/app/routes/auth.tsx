@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useAuthStore, initializeAuth } from "../lib/auth";
+import { buildApiUrl, getApiBaseUrl } from "../lib/api";
 import LoginForm from "../components/LoginForm";
 import SignupForm from "../components/SignupForm";
 import ForgotPasswordForm from "../components/ForgotPasswordForm";
 import ThemeToggle from "../components/ThemeToggle";
 
-const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
-const API_HEALTH_URL = `${API_BASE_URL}/api/health`;
+const API_BASE_URL = getApiBaseUrl();
+const API_HEALTH_URL = buildApiUrl(API_BASE_URL, "health", "");
+const HAS_EXPLICIT_API_BASE_URL = Boolean(API_BASE_URL);
 
 export const meta = () => ([
   { title: "Resumind | Auth" },
@@ -33,9 +34,9 @@ const Auth = () => {
       error?.includes("Email service is not configured")
   );
   const isApiOffline = isApiReachable === false;
-  const shouldShowOfflineContent = isApiOffline || isServerOfflineError;
+  const shouldShowOfflineContent = HAS_EXPLICIT_API_BASE_URL && (isApiOffline || isServerOfflineError);
 
-  const showSetupBanner = shouldShowOfflineContent || (Boolean(error) && isMailConfigError);
+  const showSetupBanner = HAS_EXPLICIT_API_BASE_URL && (shouldShowOfflineContent || (Boolean(error) && isMailConfigError));
 
   const checkApiHealth = async () => {
     setIsCheckingApi(true);
@@ -69,7 +70,12 @@ const Auth = () => {
   // Initialize auth from localStorage on mount
   useEffect(() => {
     initializeAuth();
-    void checkApiHealth();
+    if (HAS_EXPLICIT_API_BASE_URL) {
+      void checkApiHealth();
+      return;
+    }
+
+    setIsApiReachable(null);
   }, []);
 
   // Redirect if already authenticated
@@ -133,10 +139,10 @@ const Auth = () => {
                   {shouldShowOfflineContent ? (
                     <>
                       <p className="mt-1 text-xs leading-6 text-amber-700">
-                        Frontend is running, but the auth API at
-                        <span className="font-semibold"> http://localhost:4000</span> is unreachable.
+                        Frontend is running, but the configured auth API at
+                        <span className="font-semibold"> {API_BASE_URL}</span> is unreachable.
                       </p>
-                      <p className="mt-1 text-xs text-amber-700">Start the backend server with: npm run dev:api</p>
+                      <p className="mt-1 text-xs text-amber-700">Start the backend server locally with: npm run dev:api</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"

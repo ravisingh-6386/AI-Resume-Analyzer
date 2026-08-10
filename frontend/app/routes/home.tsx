@@ -14,30 +14,73 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const { kv } = usePuterStore();
+  const { kv, isLoading: puterLoading, puterReady } = usePuterStore();
   const { isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loadingResumes, setLoadingResumes] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) navigate("/auth?next=/");
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
+    let isActive = true;
+
+    if (puterLoading && !puterReady) {
+      return () => {
+        isActive = false;
+      };
+    }
+
     const loadResumes = async () => {
       setLoadingResumes(true);
+      setLoadError("");
 
-      const resumes = (await kv.list("resume:*", true)) as KVItem[];
+      try {
+        const resumeEntries = (await kv.list("resume:*", true)) as KVItem[] | string[] | undefined;
+        if (!isActive) {
+          return;
+        }
 
-      const parsedResumes = resumes?.map((resume) => JSON.parse(resume.value) as Resume);
+        const parsedResumes = (resumeEntries || [])
+          .map((entry) => {
+            const rawValue = typeof entry === "string" ? entry : entry.value;
+            try {
+              const parsed = JSON.parse(rawValue) as Resume;
+              if (!parsed?.id) {
+                return null;
+              }
 
-      setResumes(parsedResumes || []);
-      setLoadingResumes(false);
+              return parsed;
+            } catch {
+              return null;
+            }
+          })
+          .filter((resume): resume is Resume => Boolean(resume));
+
+        setResumes(parsedResumes);
+      } catch (error) {
+        if (isActive) {
+          setLoadError(
+            error instanceof Error ? error.message : "Failed to load saved resume analyses."
+          );
+          setResumes([]);
+        }
+      } finally {
+        if (isActive) {
+          setLoadingResumes(false);
+        }
+      }
     };
 
     loadResumes();
-  }, []);
+    return () => {
+      isActive = false;
+    };
+  }, [kv, puterLoading, puterReady, refreshToken]);
 
   return (
     <main className="app-shell relative min-h-screen overflow-hidden bg-cover pb-14">
@@ -83,7 +126,7 @@ export default function Home() {
               className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-indigo-700 hover:text-indigo-800"
             >
               Analyze new resume
-              <span aria-hidden="true">→</span>
+              <span aria-hidden="true">-&gt;</span>
             </Link>
           </div>
         </div>
@@ -103,7 +146,21 @@ export default function Home() {
           </div>
         )}
 
-        {!loadingResumes && resumes.length === 0 && (
+        {!loadingResumes && loadError && resumes.length === 0 && (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-10 text-center shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+            <h2 className="text-2xl font-semibold text-amber-900">Unable to load saved resumes</h2>
+            <p className="mx-auto mt-2 max-w-xl text-amber-800">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => setRefreshToken((value) => value + 1)}
+              className="mt-6 inline-flex h-12 items-center justify-center rounded-xl bg-amber-600 px-5 text-sm font-semibold text-white transition hover:bg-amber-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loadingResumes && !loadError && resumes.length === 0 && (
           <div className="rounded-3xl border border-white/70 bg-white/85 px-6 py-12 text-center shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl">
             <h2 className="text-2xl font-semibold text-slate-900">No resumes yet</h2>
             <p className="mx-auto mt-2 max-w-xl text-slate-600">

@@ -4,6 +4,7 @@ interface Resume {
     jobTitle?: string;
     jobDescription?: string;
     imagePath: string;
+    imagePreviewDataUrl?: string;
     resumePath: string;
     feedback: Feedback | null;
     studentFeedback?: StudentFeedback;

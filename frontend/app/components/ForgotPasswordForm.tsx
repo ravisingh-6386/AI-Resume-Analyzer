@@ -4,11 +4,14 @@ import { useAuthStore } from "../lib/auth";
 
 export default function ForgotPasswordForm() {
   const navigate = useNavigate();
-  const { resetPassword, isLoading, error, clearError } = useAuthStore();
+  const { forgotPassword, resetPassword, isLoading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetStep, setResetStep] = useState<"email" | "reset">("email");
+  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
@@ -85,6 +88,21 @@ export default function ForgotPasswordForm() {
       return;
     }
 
+    if (resetStep === "email") {
+      try {
+        const response = await forgotPassword(trimmedEmail);
+        setDevOtp(response.devOtp || null);
+        setResetStep("reset");
+      } catch {
+        // Error is handled by the store
+      }
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      return;
+    }
+
     if (!newPassword || newPassword.length < 6) {
       newPasswordRef.current?.focus();
       return;
@@ -96,7 +114,7 @@ export default function ForgotPasswordForm() {
     }
 
     try {
-      await resetPassword(trimmedEmail, newPassword);
+      await resetPassword(trimmedEmail, newPassword, otp);
       navigate("/auth?mode=login");
     } catch {
       // Error is handled by the store
@@ -106,7 +124,14 @@ export default function ForgotPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5 w-full" noValidate>
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-sm font-medium text-emerald-700">
-        Reset your password directly without OTP verification.
+        {resetStep === "email"
+          ? "Enter your email and we will send a verification code."
+          : `Enter the code sent to ${trimmedEmail}.`}
+        {devOtp && (
+          <p className="mt-2 rounded-lg bg-white/80 px-3 py-2 font-mono text-base font-semibold">
+            Dev OTP: {devOtp}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -155,7 +180,7 @@ export default function ForgotPasswordForm() {
             }}
             onFocus={handleEmailFocus}
             onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-            disabled={isLoading}
+            disabled={isLoading || resetStep === "reset"}
             className={`w-full rounded-2xl border bg-white/75 py-3.5 pl-12 pr-20 text-base text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_22px_rgba(15,23,42,0.06)] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 ${
               emailError ? "border-red-300 focus:border-red-400" : "border-slate-200 focus:border-indigo-400"
             }`}
@@ -163,7 +188,7 @@ export default function ForgotPasswordForm() {
           <button
             type="button"
             onClick={handleCopyEmail}
-            disabled={!email.trim()}
+            disabled={!email.trim() || resetStep === "reset"}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Copy email"
             title={copiedEmail ? "Copied" : "Copy email"}
@@ -183,6 +208,27 @@ export default function ForgotPasswordForm() {
         )}
       </div>
 
+      {resetStep === "reset" && (
+        <div className="flex flex-col gap-2">
+          <label htmlFor="reset-otp" className="text-sm font-semibold tracking-wide text-slate-700">
+            Verification Code
+          </label>
+          <input
+            id="reset-otp"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            required
+            placeholder="123456"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            disabled={isLoading}
+            className="w-full rounded-2xl border border-slate-200 bg-white/75 px-4 py-3.5 text-center font-mono text-xl tracking-[0.35em] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_22px_rgba(15,23,42,0.06)] transition-all duration-200 focus:border-indigo-400 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </div>
+      )}
+
+      {resetStep === "reset" && (
       <div className="flex flex-col gap-2">
         <label htmlFor="newPassword" className="text-sm font-semibold tracking-wide text-slate-700">
           New Password
@@ -238,7 +284,9 @@ export default function ForgotPasswordForm() {
           Use at least 6 characters.
         </p>
       </div>
+      )}
 
+      {resetStep === "reset" && (
       <div className="flex flex-col gap-2">
         <label htmlFor="confirmPassword" className="text-sm font-semibold tracking-wide text-slate-700">
           Confirm Password
@@ -290,6 +338,7 @@ export default function ForgotPasswordForm() {
           </p>
         )}
       </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50/90 p-3 text-sm font-medium text-red-700" role="alert" aria-live="polite">
@@ -299,7 +348,18 @@ export default function ForgotPasswordForm() {
 
       <button
         type="submit"
-        disabled={isLoading || Boolean(emailError) || Boolean(newPasswordError) || Boolean(confirmPasswordError) || !email || !newPassword || !confirmPassword}
+        disabled={
+          isLoading ||
+          Boolean(emailError) ||
+          !email ||
+          !isEmailValid ||
+          (resetStep === "reset" &&
+            (Boolean(newPasswordError) ||
+              Boolean(confirmPasswordError) ||
+              !/^\d{6}$/.test(otp) ||
+              !newPassword ||
+              !confirmPassword))
+        }
         className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-5 py-3.5 text-base font-semibold text-white shadow-[0_16px_30px_rgba(79,70,229,0.28)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_34px_rgba(79,70,229,0.34)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-65 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
       >
         <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-500 group-hover:translate-x-full" />
@@ -307,8 +367,10 @@ export default function ForgotPasswordForm() {
           {isLoading ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Resetting...
+              {resetStep === "email" ? "Sending..." : "Resetting..."}
             </>
+          ) : resetStep === "email" ? (
+            "Send Verification Code"
           ) : (
             "Reset Password"
           )}

@@ -2,11 +2,13 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import { connectDatabase } from "./config/db.js";
+import { pathToFileURL } from "url";
+import { connectDatabase, getDatabaseStatus } from "./config/db.js";
 import { env } from "./config/env.js";
 import authRoutes from "./routes/authRoutes.js";
+import analysisRoutes from "./routes/analysisRoutes.js";
 
-const app = express();
+export const app = express();
 
 app.use(helmet());
 app.use(
@@ -34,7 +36,7 @@ app.use(
     credentials: false,
   })
 );
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "2mb" }));
 
 app.use(
   "/api/auth",
@@ -48,10 +50,16 @@ app.use(
 );
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok" });
+  const database = getDatabaseStatus();
+  res.status(database === "connected" ? 200 : 503).json({
+    status: database === "connected" ? "ok" : "degraded",
+    database,
+    analysisFallbackAvailable: true,
+  });
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/analysis", analysisRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled API error", err);
@@ -61,12 +69,25 @@ app.use((err, _req, res, _next) => {
 const startServer = async () => {
   await connectDatabase();
 
-  app.listen(env.port, () => {
-    console.log(`OTP API running on http://localhost:${env.port}`);
+  const server = app.listen(env.port, () => {
+    console.log(`API running on http://localhost:${env.port}`);
   });
+
+  server.on("error", (error) => {
+    console.error("API server error", error);
+    process.exit(1);
+  });
+
+  return server;
 };
 
-startServer().catch((error) => {
-  console.error("Failed to start API server", error);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  startServer().catch((error) => {
+    console.error("Failed to start API server", error);
+    process.exit(1);
+  });
+}
+
+export { startServer };

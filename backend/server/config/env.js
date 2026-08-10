@@ -1,7 +1,19 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config({ path: "backend/.env" });
-dotenv.config();
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const backendDir = path.resolve(currentDir, "..", "..");
+const workspaceRoot = path.resolve(backendDir, "..");
+
+[
+  path.join(workspaceRoot, ".env.local"),
+  path.join(workspaceRoot, ".env"),
+  path.join(backendDir, ".env.local"),
+  path.join(backendDir, ".env"),
+].forEach((envPath) => {
+  dotenv.config({ path: envPath, override: false });
+});
 
 const mailUser = process.env.MAIL_USER || "";
 const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
@@ -9,20 +21,30 @@ const smtpPort = Number(process.env.SMTP_PORT || 465);
 const smtpSecure =
   (process.env.SMTP_SECURE || String(smtpPort === 465)).toLowerCase() === "true";
 const smtpService = process.env.SMTP_SERVICE || "";
-const looksLikePlaceholder = (value) => {
+const looksLikePlaceholder = (value, placeholders = []) => {
   const normalized = (value || "").trim().toLowerCase();
   return (
     !normalized ||
-    normalized.includes("your-email@gmail.com") ||
-    normalized.includes("your-gmail-app-password") ||
-    normalized.includes("your-smtp-password") ||
-    normalized.includes("your-mail-password")
+    placeholders.some((placeholder) => normalized.includes(placeholder))
   );
 };
 
+const openAiApiKey = process.env.OPENAI_API_KEY || "";
+const openAiModel = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const openAiBaseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+const looksLikeMailPlaceholder = (value) =>
+  looksLikePlaceholder(value, [
+    "your-email@gmail.com",
+    "your-gmail-app-password",
+    "your-smtp-password",
+    "your-mail-password",
+  ]);
+const looksLikeOpenAiPlaceholder = (value) =>
+  looksLikePlaceholder(value, ["your-openai-api-key"]);
+
 const passwordCandidates = [process.env.MAIL_PASSWORD || "", process.env.MAIL_APP_PASSWORD || ""];
 const mailPassword =
-  passwordCandidates.find((value) => value && !looksLikePlaceholder(value)) ||
+  passwordCandidates.find((value) => value && !looksLikeMailPlaceholder(value)) ||
   passwordCandidates.find(Boolean) ||
   "";
 
@@ -36,10 +58,14 @@ export const env = {
   smtpPort,
   smtpSecure,
   smtpService,
+  openAiApiKey,
+  openAiModel,
+  openAiBaseUrl,
+  isOpenAiConfigured: Boolean(openAiApiKey) && !looksLikeOpenAiPlaceholder(openAiApiKey),
   isMailConfigured:
     Boolean(mailUser && mailPassword) &&
-    !looksLikePlaceholder(mailUser) &&
-    !looksLikePlaceholder(mailPassword),
+    !looksLikeMailPlaceholder(mailUser) &&
+    !looksLikeMailPlaceholder(mailPassword),
   mailFrom: process.env.MAIL_FROM || mailUser,
   clientOrigins: (process.env.CLIENT_ORIGIN || "http://localhost:5173,http://localhost:3000")
     .split(",")

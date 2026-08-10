@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
 import FileUploader from "../components/FileUploader";
 import { usePuterStore } from "../lib/puter";
@@ -8,11 +8,62 @@ import {
     generateActionableRewrites,
     generateProjectBullets,
     generateUUID,
+    extractResumeTextFromPdfFile,
     getRoleKeywordAnalysis,
     parseFeedback,
     rewriteFeedbackForStudents,
 } from "../lib/utils";
-import { prepareInstructions } from "../../constants";
+
+const ANALYSIS_API_URL = "/api/analysis/feedback";
+const ANALYSIS_HEALTH_URL = "/api/analysis/health";
+const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
+const STORED_PREVIEW_MAX_WIDTH = 900;
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read preview image"));
+        reader.readAsDataURL(blob);
+    });
+
+const createCompactPreviewDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const image = new Image();
+
+        image.onload = () => {
+            try {
+                const scale = Math.min(1, STORED_PREVIEW_MAX_WIDTH / image.naturalWidth);
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                const context = canvas.getContext("2d");
+
+                if (!context) {
+                    reject(new Error("Failed to create preview canvas"));
+                    return;
+                }
+
+                context.fillStyle = "#ffffff";
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+                resolve(canvas.toDataURL("image/jpeg", 0.82));
+            } catch (error) {
+                reject(error);
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+
+        image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("Failed to load preview image"));
+        };
+
+        image.src = objectUrl;
+    });
 
 type FormValues = {
     companyName: string;
@@ -28,7 +79,7 @@ type FormErrors = {
 };
 
 const Upload = () => {
-    const { fs, ai, kv } = usePuterStore();
+    const { fs, kv } = usePuterStore();
     const navigate = useNavigate();
     const [isProcessing, setIsProcessing] = useState(false);
     const [statusText, setStatusText] = useState("");
@@ -39,6 +90,7 @@ const Upload = () => {
         jobDescription: "",
     });
     const [formErrors, setFormErrors] = useState<FormErrors>({});
+    const [isAnalysisAvailable, setIsAnalysisAvailable] = useState<boolean | null>(null);
 
     const descriptionLength = formValues.jobDescription.length;
 
@@ -63,8 +115,27 @@ const Upload = () => {
         return Math.round((completedCount / requiredFields.length) * 100);
     }, [file, formValues.companyName, formValues.jobDescription, formValues.jobTitle]);
 
+    useEffect(() => {
+        const checkAnalysisHealth = async () => {
+            try {
+                const response = await fetch(ANALYSIS_HEALTH_URL);
+                const data = await response.json().catch(() => ({}));
+                setIsAnalysisAvailable(Boolean(data?.configured || data?.fallbackAvailable));
+            } catch {
+                setIsAnalysisAvailable(false);
+            }
+        };
+
+        void checkAnalysisHealth();
+    }, []);
+
     const validateForm = () => {
         const nextErrors: FormErrors = {};
+
+        if (isAnalysisAvailable === false) {
+            setStatusText("Error: Resume analysis service is unavailable. Please restart the backend and try again.");
+            return false;
+        }
 
         if (!formValues.companyName.trim()) {
             nextErrors.companyName = "Please enter a company name.";
@@ -114,6 +185,24 @@ const Upload = () => {
             const imageFile = await convertPdfToImage(file);
             if (!imageFile.file) throw new Error(imageFile.error || "Failed to convert PDF to image");
 
+            let imagePreviewDataUrl = "";
+            try {
+                const previewDataUrl = await createCompactPreviewDataUrl(imageFile.file);
+                if (previewDataUrl.length <= MAX_STORED_PREVIEW_LENGTH) {
+                    imagePreviewDataUrl = previewDataUrl;
+                }
+                if (!imagePreviewDataUrl) {
+                    const fallbackDataUrl = await blobToDataUrl(imageFile.file);
+                    if (fallbackDataUrl.length <= MAX_STORED_PREVIEW_LENGTH) {
+                        imagePreviewDataUrl = fallbackDataUrl;
+                    }
+                }
+            } catch {
+                imagePreviewDataUrl = "";
+            }
+
+            const resumeText = await extractResumeTextFromPdfFile(file);
+
             setStatusText("Uploading preview image...");
             const uploadedImage = (await Promise.race([
                 fs.upload([imageFile.file]),
@@ -130,6 +219,7 @@ const Upload = () => {
                 id: string;
                 resumePath: string;
                 imagePath: string;
+                imagePreviewDataUrl?: string;
                 companyName: string;
                 jobTitle: string;
                 jobDescription: string;
@@ -147,6 +237,7 @@ const Upload = () => {
                 id: uuid,
                 resumePath: uploadedFile.path,
                 imagePath: uploadedImage.path,
+                imagePreviewDataUrl,
                 companyName,
                 jobTitle,
                 jobDescription,
@@ -161,32 +252,31 @@ const Upload = () => {
             data.jobState = "processing";
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
 
-            const feedbackTimeout = new Promise((_, reject) =>
-                setTimeout(
-                    () =>
-                        reject(
-                            new Error(
-                                "Analysis timeout: exceeded 180 seconds (3 minutes). Please try again with a shorter job description."
-                            )
-                        ),
-                    180000
-                )
-            );
+            const analysisResponse = await fetch(ANALYSIS_API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    jobTitle,
+                    jobDescription,
+                    resumeText,
+                }),
+            });
 
-            const feedback = (await Promise.race([
-                ai.feedback(uploadedFile.path, prepareInstructions({ jobTitle, jobDescription })),
-                feedbackTimeout,
-            ])) as any;
+            const analysisPayload = await analysisResponse.json().catch(() => null);
 
-            if (!feedback || !feedback.message) {
-                throw new Error("Invalid AI response format. Please try again.");
+            if (!analysisResponse.ok) {
+                throw new Error(
+                    (analysisPayload && typeof analysisPayload.message === "string"
+                        ? analysisPayload.message
+                        : "AI analysis failed. Please retry the analysis.")
+                );
             }
 
             const feedbackText =
-                typeof feedback.message.content === "string"
-                    ? feedback.message.content
-                    : Array.isArray(feedback.message.content)
-                    ? feedback.message.content[0]?.text
+                typeof analysisPayload?.message?.content === "string"
+                    ? analysisPayload.message.content
                     : "";
 
             if (!feedbackText) {
@@ -194,7 +284,7 @@ const Upload = () => {
             }
 
             const parsedFeedback = parseFeedback(feedbackText);
-            const usedFallbackAnalysis = feedback?.via_ai_chat_service === false;
+            const usedFallbackAnalysis = analysisPayload?.via_ai_chat_service === false;
 
             if (!parsedFeedback || parsedFeedback.overallScore === 0) {
                 throw new Error("Failed to parse AI feedback properly.");
@@ -210,7 +300,12 @@ const Upload = () => {
             }
 
             data.feedback = parsedFeedback;
-            const roleKeywordAnalysis = getRoleKeywordAnalysis(jobTitle, jobDescription, parsedFeedback);
+            const roleKeywordAnalysis = getRoleKeywordAnalysis(
+                jobTitle,
+                jobDescription,
+                parsedFeedback,
+                resumeText
+            );
             const studentFeedback = rewriteFeedbackForStudents(parsedFeedback);
             const generatedProjectBullets = generateProjectBullets(jobTitle, roleKeywordAnalysis);
             const actionableRewrites = generateActionableRewrites(parsedFeedback);
@@ -257,6 +352,10 @@ const Upload = () => {
             }
 
             setStatusText(`Error: ${errorMsg}`);
+            setFormErrors((prev) => ({
+                ...prev,
+                file: errorMsg.includes("AI analysis") ? "AI analysis could not be completed. Please retry." : prev.file,
+            }));
             setIsProcessing(false);
             window.scrollTo({ top: 0, behavior: "smooth" });
         }
@@ -436,7 +535,7 @@ const Upload = () => {
                             <button
                                 className="group relative mt-2 inline-flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-6 text-base font-semibold text-white shadow-[0_16px_34px_rgba(79,70,229,0.34)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(79,70,229,0.42)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-65 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
                                 type="submit"
-                                disabled={isProcessing}
+                                disabled={isProcessing || isAnalysisAvailable === false}
                             >
                                 <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-500 group-hover:translate-x-full" />
                                 <span className="relative flex items-center gap-2">

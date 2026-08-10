@@ -11,7 +11,6 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { usePuterStore } from "./lib/puter";
 import { initializeAuth } from "./lib/auth";
-import "./lib/testSetup";
 import { type ReactNode, useEffect } from "react";
 
 export const links: Route.LinksFunction = () => [
@@ -31,7 +30,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const init = usePuterStore((s) => s.init);
 
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      void import("./lib/testSetup");
+    }
+
     initializeAuth();
+
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      init();
+      return;
+    }
 
     const script = document.createElement("script");
     script.src = "https://js.puter.com/v2/";
@@ -71,7 +79,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        <style>{`html,body{font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;}`}</style>
+        <style>{`html,body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;}`}</style>
       </head>
       <body>
         {children}

@@ -3,20 +3,102 @@ import ScoreCircle from "./ScoreCircle";
 import {useEffect, useState, memo} from "react";
 import {usePuterStore} from "../lib/puter";
 
-const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imagePath } }: { resume: Resume }) => {
+const revokeObjectUrl = (url: string) => {
+    if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+    }
+};
+
+const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imagePath, imagePreviewDataUrl } }: { resume: Resume }) => {
     const { fs } = usePuterStore();
     const [resumeUrl, setResumeUrl] = useState('');
+    const [previewError, setPreviewError] = useState('');
 
     useEffect(() => {
+        let isActive = true;
+        const storedPreviewUrl =
+            typeof imagePreviewDataUrl === "string" && imagePreviewDataUrl.startsWith("data:image/")
+                ? imagePreviewDataUrl
+                : "";
+
+        if (!imagePath && !storedPreviewUrl) {
+            setResumeUrl((currentUrl) => {
+                if (currentUrl) {
+                    revokeObjectUrl(currentUrl);
+                }
+                return '';
+            });
+            setPreviewError('Preview unavailable');
+            return;
+        }
+
         const loadResume = async () => {
-            const blob = await fs.read(imagePath);
-            if(!blob) return;
-            let url = URL.createObjectURL(blob);
-            setResumeUrl(url);
+            try {
+                const blob = imagePath ? await fs.read(imagePath) : undefined;
+                if (!blob) {
+                    if (isActive) {
+                        if (storedPreviewUrl) {
+                            setResumeUrl((currentUrl) => {
+                                if (currentUrl) {
+                                    revokeObjectUrl(currentUrl);
+                                }
+                                return storedPreviewUrl;
+                            });
+                            setPreviewError('');
+                        } else {
+                            setResumeUrl((currentUrl) => {
+                                if (currentUrl) {
+                                    revokeObjectUrl(currentUrl);
+                                }
+                                return '';
+                            });
+                            setPreviewError('Preview unavailable');
+                        }
+                    }
+                    return;
+                }
+
+                const url = URL.createObjectURL(blob);
+                if (!isActive) {
+                    revokeObjectUrl(url);
+                    return;
+                }
+
+                setResumeUrl((currentUrl) => {
+                    if (currentUrl) {
+                        revokeObjectUrl(currentUrl);
+                    }
+                    return url;
+                });
+                setPreviewError('');
+            } catch {
+                if (isActive) {
+                    if (storedPreviewUrl) {
+                        setResumeUrl((currentUrl) => {
+                            if (currentUrl) {
+                                revokeObjectUrl(currentUrl);
+                            }
+                            return storedPreviewUrl;
+                        });
+                        setPreviewError('');
+                    } else {
+                        setResumeUrl((currentUrl) => {
+                            if (currentUrl) {
+                                revokeObjectUrl(currentUrl);
+                            }
+                            return '';
+                        });
+                        setPreviewError('Preview unavailable');
+                    }
+                }
+            }
         }
 
         loadResume();
-    }, [imagePath]);
+        return () => {
+            isActive = false;
+        };
+    }, [fs, imagePath, imagePreviewDataUrl]);
 
     return (
         <Link
@@ -39,8 +121,8 @@ const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imageP
                     )}
                 </div>
             </div>
-            {resumeUrl && (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+                {resumeUrl ? (
                     <div className="w-full h-full">
                         <img
                             src={resumeUrl}
@@ -48,8 +130,18 @@ const ResumeCard = memo(({ resume: { id, companyName, jobTitle, feedback, imageP
                             className="h-[300px] w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.02] max-sm:h-[220px]"
                         />
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="flex h-[300px] flex-col items-center justify-center gap-3 px-6 text-center max-sm:h-[220px]">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                            <span className="text-xl">PDF</span>
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-slate-700">{previewError || "Preview unavailable"}</p>
+                            <p className="mt-1 text-xs text-slate-500">Open the analysis to review ATS feedback and saved details.</p>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <div className="mt-auto flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">View Analysis</p>

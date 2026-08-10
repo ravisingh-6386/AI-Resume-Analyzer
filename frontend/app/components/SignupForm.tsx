@@ -6,9 +6,18 @@ export default function SignupForm() {
   const navigate = useNavigate();
   const {
     signup,
+    verifySignupOtp,
+    resendSignupOtp,
+    resetSignupOtpState,
     isLoading,
     error,
     clearError,
+    isOtpStep,
+    pendingSignupEmail,
+    resendCount,
+    maxResendAttempts,
+    otpExpiresAt,
+    signupDevOtp,
   } = useAuthStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,6 +26,7 @@ export default function SignupForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [otp, setOtp] = useState("");
   const emailInputRef = useRef<HTMLInputElement>(null);
   const [touched, setTouched] = useState({
     name: false,
@@ -60,8 +70,19 @@ export default function SignupForm() {
 
     try {
       await signup(email, password, name);
-      navigate("/");
     } catch (_err) {
+      // Error is handled by the store
+    }
+  };
+
+  const handleVerifyOtp = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    clearError();
+
+    try {
+      await verifySignupOtp(otp);
+      navigate("/");
+    } catch {
       // Error is handled by the store
     }
   };
@@ -99,6 +120,82 @@ export default function SignupForm() {
     hasError
       ? "border-red-300 focus-within:border-red-400 focus-within:ring-4 focus-within:ring-red-100"
       : "border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100";
+
+  if (isOtpStep) {
+    const canResend = resendCount < maxResendAttempts;
+    const secondsLeft = otpExpiresAt ? Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000)) : 0;
+
+    return (
+      <form onSubmit={handleVerifyOtp} className="flex flex-col gap-5 w-full" noValidate>
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3 text-sm text-indigo-800">
+          <p className="font-semibold">Verify your email</p>
+          <p className="mt-1">
+            Enter the 6-digit code sent to {pendingSignupEmail || "your email"}.
+          </p>
+          {signupDevOtp && (
+            <p className="mt-2 rounded-lg bg-white/80 px-3 py-2 font-mono text-base font-semibold">
+              Dev OTP: {signupDevOtp}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          <label htmlFor="signup-otp" className="text-sm font-semibold tracking-wide text-slate-700">
+            Verification Code
+          </label>
+          <div className={`${inputShellBase} ${getInputShellState(Boolean(otp && !/^\d{6}$/.test(otp)))}`}>
+            <input
+              id="signup-otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="123456"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              disabled={isLoading}
+              className={`${inputTextBase} text-center font-mono text-xl tracking-[0.35em]`}
+            />
+          </div>
+          {secondsLeft > 0 && (
+            <p className="text-xs text-slate-500">Code expires in {secondsLeft}s.</p>
+          )}
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50/90 p-3 text-sm font-medium text-red-700" role="alert">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isLoading || !/^\d{6}$/.test(otp)}
+          className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-600 px-5 py-3.5 text-base font-semibold text-white shadow-[0_16px_30px_rgba(79,70,229,0.28)] transition duration-300 hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-65 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200"
+        >
+          {isLoading ? "Verifying..." : "Verify Email"}
+        </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <button
+            type="button"
+            onClick={() => void resendSignupOtp()}
+            disabled={isLoading || !canResend}
+            className="font-semibold text-indigo-600 underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:text-slate-400"
+          >
+            Resend code
+          </button>
+          <button
+            type="button"
+            onClick={resetSignupOtpState}
+            disabled={isLoading}
+            className="font-semibold text-slate-500 underline-offset-4 hover:underline disabled:cursor-not-allowed"
+          >
+            Change email
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5 w-full" noValidate>

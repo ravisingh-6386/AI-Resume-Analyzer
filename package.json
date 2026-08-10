@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "react-router dev",
-    "dev:all": "concurrently -n web,api -c cyan,green \"npm run dev\" \"npm run dev:api\"",
+    "dev": "concurrently -n web,api -c cyan,green \"npm run dev:web\" \"npm run dev:api\"",
+    "dev:web": "react-router dev",
+    "dev:all": "concurrently -n web,api -c cyan,green \"npm run dev:web\" \"npm run dev:api\"",
     "dev:api": "node --watch backend/server/index.js",
     "start": "react-router-serve ./build/server/index.js",
     "start:api": "node backend/server/index.js",

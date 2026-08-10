@@ -102,6 +102,7 @@ const getPuter = (): typeof window.puter | null =>
 const LOCAL_FS_INDEX_KEY = "localfs:index";
 const LOCAL_FS_DATA_PREFIX = "localfs:data:";
 const LOCAL_KV_PREFIX = "localkv:";
+const MAX_LOCAL_FS_DATA_URL_LENGTH = 1_500_000;
 const localFsDataStore = new Map<string, Blob>();
 
 const getRandomId = () => {
@@ -139,6 +140,19 @@ const clearLegacyLocalFsData = () => {
         key.startsWith(LOCAL_FS_DATA_PREFIX)
     );
     legacyKeys.forEach((key) => localStorage.removeItem(key));
+};
+
+const persistLocalFsBlob = async (path: string, blob: Blob) => {
+    try {
+        const dataUrl = await blobToDataUrl(blob);
+        if (dataUrl.length <= MAX_LOCAL_FS_DATA_URL_LENGTH) {
+            localStorage.setItem(`${LOCAL_FS_DATA_PREFIX}${path}`, dataUrl);
+        } else {
+            localStorage.removeItem(`${LOCAL_FS_DATA_PREFIX}${path}`);
+        }
+    } catch {
+        localStorage.removeItem(`${LOCAL_FS_DATA_PREFIX}${path}`);
+    }
 };
 
 const setLocalFsIndex = (items: FSItem[]) => {
@@ -429,7 +443,7 @@ const buildFallbackFeedbackText = async (
             tips: [
                 {
                     type: "good",
-                    tip: `Fallback used resume text signals: matched ${matchedKeywords.length}/${jdTokens.length || 0} role keywords.`,
+                    tip: `Resume text signals matched ${matchedKeywords.length}/${jdTokens.length || 0} role keywords.`,
                 },
                 {
                     type: "improve",
@@ -705,7 +719,6 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             set({ puterReady: true });
             checkAuthStatus();
         } else {
-            clearLegacyLocalFsData();
             set({ puterReady: false, error: null, isLoading: false });
             checkAuthStatus();
         }
@@ -720,6 +733,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
                     : data;
             const fileName = path.split("/").pop() || `file-${getRandomId()}`;
             localFsDataStore.set(path, blob);
+            await persistLocalFsBlob(path, blob);
             const item = createLocalFsItem(path, fileName, blob.size);
             upsertLocalFsItem(item);
             return undefined;
@@ -777,6 +791,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             const name = firstFile instanceof File ? firstFile.name : `blob-${id}`;
             const path = `/local/${id}-${name}`;
             localFsDataStore.set(path, firstFile);
+            await persistLocalFsBlob(path, firstFile);
             const item = createLocalFsItem(path, name, firstFile.size);
             upsertLocalFsItem(item);
             return item;
@@ -909,20 +924,12 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             }
             return result;
         } catch (error) {
-            console.error('AI analysis failed, using fallback feedback:', error);
-            return {
-                index: 0,
-                message: {
-                    role: "assistant",
-                    content: await buildFallbackFeedbackText(path, message, puter),
-                    refusal: null,
-                    annotations: [],
-                },
-                logprobs: null,
-                finish_reason: "stop",
-                usage: [],
-                via_ai_chat_service: false,
-            };
+            console.error('AI analysis failed:', error);
+            throw new Error(
+                error instanceof Error
+                    ? error.message
+                    : 'AI analysis failed. Please retry the analysis.'
+            );
         }
     };
 

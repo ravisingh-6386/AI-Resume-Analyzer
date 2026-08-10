@@ -57,49 +57,9 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/signup", async (req, res) => {
-  try {
-    const nameInput = req.body.name;
-    const emailInput = req.body.email;
-    const password = req.body.password;
-
-    if (typeof nameInput !== "string" || !nameInput.trim()) {
-      return res.status(400).json({ message: "Name is required" });
-    }
-
-    if (typeof emailInput !== "string" || !isEmailValid(emailInput)) {
-      return res.status(400).json({ message: "Please enter a valid email address" });
-    }
-
-    if (typeof password !== "string" || password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
-
-    const email = normalizeEmail(emailInput);
-    const existingUser = await User.findOne({ email }).lean();
-    if (existingUser) {
-      return res.status(409).json({ message: "Email already registered" });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({
-      name: nameInput.trim(),
-      email,
-      passwordHash,
-      emailVerified: true,
-    });
-
-    return res.status(201).json({
-      message: "Account created successfully",
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name,
-      },
-    });
-  } catch (error) {
-    console.error("signup error", error);
-    return res.status(500).json({ message: "Unable to create account right now" });
-  }
+  return res.status(410).json({
+    message: "Direct signup is disabled. Please request and verify an OTP to create an account.",
+  });
 });
 
 router.post("/send-otp", async (req, res) => {
@@ -357,36 +317,34 @@ router.post("/reset-password", async (req, res) => {
     }
 
     const email = normalizeEmail(emailInput);
-    const shouldValidateOtp = typeof otpInput === "string" && otpInput.trim().length > 0;
+    if (typeof otpInput !== "string" || !otpInput.trim()) {
+      return res.status(400).json({ message: "Password reset OTP is required" });
+    }
 
-    if (shouldValidateOtp && !/^\d{6}$/.test(otpInput.trim())) {
+    if (!/^\d{6}$/.test(otpInput.trim())) {
       return res.status(400).json({ message: "Please enter a valid 6-digit OTP" });
     }
 
-    if (shouldValidateOtp) {
-      const otp = otpInput.trim();
-      const session = await PasswordResetSession.findOne({ email });
-      if (!session) {
-        return res.status(400).json({ message: "Invalid or expired OTP" });
-      }
+    const otp = otpInput.trim();
+    const session = await PasswordResetSession.findOne({ email });
+    if (!session) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
 
-      if (session.expiresAt.getTime() < Date.now()) {
-        await PasswordResetSession.deleteOne({ _id: session._id });
-        return res.status(400).json({ message: "Invalid or expired OTP" });
-      }
-
-      if (session.verifyAttempts >= env.otpMaxVerifyAttempts) {
-        return res.status(429).json({ message: "Too many attempts. Please request a new OTP." });
-      }
-
-      const isMatch = isOtpMatch(otp, session.otpHash, session.otpSalt);
-      if (!isMatch) {
-        session.verifyAttempts += 1;
-        await session.save();
-        return res.status(400).json({ message: "Invalid or expired OTP" });
-      }
-
+    if (session.expiresAt.getTime() < Date.now()) {
       await PasswordResetSession.deleteOne({ _id: session._id });
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    if (session.verifyAttempts >= env.otpMaxVerifyAttempts) {
+      return res.status(429).json({ message: "Too many attempts. Please request a new OTP." });
+    }
+
+    const isMatch = isOtpMatch(otp, session.otpHash, session.otpSalt);
+    if (!isMatch) {
+      session.verifyAttempts += 1;
+      await session.save();
+      return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
     const user = await User.findOne({ email });
@@ -396,10 +354,7 @@ router.post("/reset-password", async (req, res) => {
 
     user.passwordHash = await bcrypt.hash(newPassword, 12);
     await user.save();
-
-    if (!shouldValidateOtp) {
-      await PasswordResetSession.deleteMany({ email });
-    }
+    await PasswordResetSession.deleteOne({ _id: session._id });
 
     return res.json({ message: "Password reset successful" });
   } catch (error) {
@@ -409,3 +364,4 @@ router.post("/reset-password", async (req, res) => {
 });
 
 export default router;
+

@@ -20,6 +20,30 @@ export const generateUUID = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+export const extractResumeTextFromPdfFile = async (file: File): Promise<string> => {
+  try {
+    // Reuse the same PDF parser used by the upload pipeline.
+    // @ts-expect-error - dynamic import has no static module type here
+    const pdfJs = await import("pdfjs-dist/build/pdf.mjs");
+    pdfJs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+    const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const maxPages = Math.min(pdf.numPages || 1, 3);
+    const pageTexts: string[] = [];
+
+    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex += 1) {
+      const page = await pdf.getPage(pageIndex);
+      const textContent = await page.getTextContent();
+      const parts = (textContent.items as Array<{ str?: string }>).map((item) => item.str || "");
+      pageTexts.push(parts.join(" "));
+    }
+
+    return pageTexts.join(" ").replace(/\s+/g, " ").trim();
+  } catch {
+    return "";
+  }
+};
+
 export const parseFeedback = (feedbackData: any): Feedback => {
   try {
     let data = feedbackData;
@@ -177,12 +201,13 @@ export const detectRolePack = (jobTitle: string): string => {
 export const getRoleKeywordAnalysis = (
   jobTitle: string,
   jobDescription: string,
-  feedback: Feedback
+  feedback: Feedback,
+  resumeText = ""
 ): RoleKeywordAnalysis => {
   const rolePack = detectRolePack(jobTitle);
   const keywords = ROLE_KEYWORD_PACKS[rolePack] ?? ROLE_KEYWORD_PACKS.default;
   const corpus = normalizeText(
-    `${jobTitle} ${jobDescription} ${feedback.skills.tips.map((t) => t.tip).join(" ")}`
+    `${jobTitle} ${jobDescription} ${resumeText} ${feedback.skills.tips.map((t) => t.tip).join(" ")}`
   );
 
   const matchedKeywords = keywords.filter((keyword) => corpus.includes(normalizeText(keyword)));
